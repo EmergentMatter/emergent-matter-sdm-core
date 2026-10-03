@@ -1,6 +1,6 @@
 [project]
 name = "emergent-matter-sdm-core"
-version = "0.0.0"
+version = "1.0.0"
 description = "The Software Defined Matter ecosystem's core library, including the SDM schema definition and SDM's auto differentiable primitive set built to perform multi-physics and multi-material design and analysis."
 readme = "README.md"
 requires-python = ">=3.13"
