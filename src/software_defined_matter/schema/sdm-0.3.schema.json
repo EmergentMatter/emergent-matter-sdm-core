@@ -1,0 +1,4206 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://emergent-matter.example/schemas/sdm-0.3.schema.json",
+  "title": "SDM Part (0.3: + Param.expr, Param.prior, Param.tolerance)",
+  "description": "Source-of-truth file format for a manufactured part.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "name"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "0.3"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "params": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/param"
+      }
+    },
+    "materials": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/material"
+      }
+    },
+    "couplings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/coupling"
+      }
+    },
+    "objectives": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/objective"
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/constraint"
+      }
+    },
+    "metadata": {
+      "type": "object"
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "kinematics": {
+      "$ref": "#/$defs/kinematics"
+    }
+  },
+  "$defs": {
+    "param": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "number"
+        },
+        "free": {
+          "type": "boolean"
+        },
+        "bounds": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "minItems": 2,
+              "maxItems": 2
+            }
+          ]
+        },
+        "unit": {
+          "enum": [
+            "GPa",
+            "Hz",
+            "MPa",
+            "N",
+            "N*mm",
+            "N*mm/rad",
+            "N/mm",
+            "count",
+            "deg",
+            "g",
+            "g/mm^3",
+            "kg",
+            "kg/m^3",
+            "mm",
+            "mm^2",
+            "mm^3",
+            "rad",
+            "ratio",
+            "s"
+          ]
+        },
+        "ui": {
+          "$ref": "#/$defs/paramUi"
+        },
+        "prior": {
+          "$ref": "#/$defs/paramPrior"
+        },
+        "tolerance": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "expr": {
+          "$ref": "#/$defs/expr"
+        }
+      },
+      "required": [
+        "name",
+        "value",
+        "unit"
+      ],
+      "not": {
+        "required": [
+          "prior",
+          "tolerance"
+        ]
+      }
+    },
+    "paramUi": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "step": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "explore_bounds": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "group": {
+          "type": "string"
+        },
+        "order": {
+          "type": "number"
+        },
+        "role": {
+          "enum": [
+            "topology",
+            "pose"
+          ]
+        },
+        "rebuild": {
+          "type": "boolean"
+        },
+        "axis": {
+          "enum": [
+            "radial",
+            "axial",
+            "tangential"
+          ]
+        },
+        "collapsed": {
+          "type": "boolean"
+        },
+        "driven": {
+          "type": "boolean"
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 2
+        }
+      }
+    },
+    "paramPrior": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "dist"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "dist": {
+              "const": "delta"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "dist",
+            "lo",
+            "hi"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "dist": {
+              "const": "uniform"
+            },
+            "lo": {
+              "type": "number"
+            },
+            "hi": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "dist",
+            "sigma"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "dist": {
+              "const": "normal"
+            },
+            "sigma": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "dist",
+            "half_width"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "dist": {
+              "const": "uniform_pm"
+            },
+            "half_width": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        }
+      ]
+    },
+    "material": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "material_id": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sdf_tree": {
+          "$ref": "#/$defs/sdf"
+        }
+      },
+      "required": [
+        "material_id",
+        "name",
+        "sdf_tree"
+      ]
+    },
+    "coupling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "position": {
+          "$ref": "#/$defs/vec3"
+        },
+        "normal": {
+          "$ref": "#/$defs/vec3"
+        },
+        "sdf_tree": {
+          "$ref": "#/$defs/sdfOrNull"
+        },
+        "metadata": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "position"
+      ]
+    },
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sense": {
+          "enum": [
+            "minimize",
+            "maximize"
+          ]
+        },
+        "expr": {
+          "$ref": "#/$defs/expr"
+        },
+        "weight": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "sense",
+        "expr"
+      ]
+    },
+    "constraint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expr": {
+          "$ref": "#/$defs/expr"
+        },
+        "op": {
+          "enum": [
+            "<=",
+            ">=",
+            "==",
+            "<",
+            ">"
+          ]
+        },
+        "rhs": {
+          "type": "number"
+        },
+        "tolerance": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "expr",
+        "op",
+        "rhs"
+      ]
+    },
+    "vec3": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "sdfOrNull": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/sdf"
+        }
+      ]
+    },
+    "sdf": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "unevaluatedProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "primitive"
+            },
+            "kind": {
+              "type": "string",
+              "minLength": 1
+            },
+            "params": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "op"
+            },
+            "op": {
+              "type": "string",
+              "minLength": 1
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/sdf"
+              },
+              "minItems": 1
+            },
+            "params": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "op",
+            "children"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "transform"
+            },
+            "transform": {
+              "type": "string",
+              "minLength": 1
+            },
+            "child": {
+              "$ref": "#/$defs/sdf"
+            },
+            "params": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "transform",
+            "child"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "modifier"
+            },
+            "modifier": {
+              "type": "string",
+              "minLength": 1
+            },
+            "child": {
+              "$ref": "#/$defs/sdf"
+            },
+            "params": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "modifier",
+            "child"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "deform"
+            },
+            "deform": {
+              "type": "string",
+              "minLength": 1
+            },
+            "child": {
+              "$ref": "#/$defs/sdf"
+            },
+            "field": {
+              "$ref": "#/$defs/field"
+            },
+            "params": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "deform",
+            "child"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "2d_to_3d"
+            },
+            "method": {
+              "type": "string",
+              "minLength": 1
+            },
+            "child": {
+              "$ref": "#/$defs/sdf"
+            },
+            "params": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "method",
+            "child"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "sweep"
+            },
+            "child": {
+              "$ref": "#/$defs/sdf"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "array",
+                  "items": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "minItems": 2
+                },
+                "path_kind": {
+                  "enum": [
+                    "bspline",
+                    "bezier",
+                    "polyline"
+                  ]
+                },
+                "closed": {
+                  "type": "boolean"
+                },
+                "frame": {
+                  "enum": [
+                    "rmf",
+                    "cylindrical"
+                  ]
+                },
+                "normal0": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          },
+          "required": [
+            "child",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "loft"
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/sdf"
+              },
+              "minItems": 2
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "z": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "smooth": {
+                  "type": "boolean"
+                },
+                "interp": {
+                  "enum": [
+                    "field",
+                    "shape"
+                  ]
+                }
+              },
+              "required": [
+                "z"
+              ]
+            }
+          },
+          "required": [
+            "children",
+            "params"
+          ]
+        }
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "annular_sector",
+                  "bellows",
+                  "bezier_2d",
+                  "box",
+                  "box_2d",
+                  "box_frame",
+                  "bspline_2d",
+                  "capped_cone",
+                  "capped_cylinder",
+                  "capped_torus",
+                  "capsule",
+                  "circle_2d",
+                  "cone",
+                  "cut_sphere",
+                  "ellipsoid",
+                  "gyroid",
+                  "helix",
+                  "hex_prism",
+                  "leaf_spring",
+                  "lidinoid",
+                  "link",
+                  "neovius",
+                  "notch_hinge",
+                  "octahedron",
+                  "plane",
+                  "polygon_2d",
+                  "pyramid",
+                  "raster_field",
+                  "round_box",
+                  "rounded_box_2d",
+                  "rounded_cylinder",
+                  "schwarz_d",
+                  "schwarz_p",
+                  "screw_thread",
+                  "segment_2d",
+                  "serpentine",
+                  "solid_angle",
+                  "sphere",
+                  "torus",
+                  "trapezoid_2d",
+                  "tri_prism",
+                  "uneven_capsule_2d"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "op"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "op": {
+                "enum": [
+                  "intersect",
+                  "smooth_intersect",
+                  "smooth_subtract",
+                  "smooth_union",
+                  "softmin_chunked",
+                  "softmin_many",
+                  "subtract",
+                  "union"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "transform"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "transform": {
+                "enum": [
+                  "canonical_sector_fold",
+                  "mirror",
+                  "repeat_finite",
+                  "repeat_inf",
+                  "rotate_matrix",
+                  "rotate_x",
+                  "rotate_y",
+                  "rotate_z",
+                  "scale",
+                  "translate"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "modifier"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "modifier": {
+                "enum": [
+                  "elongate",
+                  "onion",
+                  "round"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "deform"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "deform": {
+                "enum": [
+                  "bend",
+                  "displace",
+                  "twist",
+                  "twist_linear",
+                  "twist_radial"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "2d_to_3d"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "method": {
+                "enum": [
+                  "extrusion",
+                  "revolution"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "annular_sector"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "inner_r": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "outer_r": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "half_angle": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "height": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "inner_r",
+                  "outer_r",
+                  "half_angle",
+                  "height"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "bellows"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "outer_r": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "inner_r": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "period": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "n_periods": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "outer_r",
+                  "inner_r",
+                  "period",
+                  "n_periods"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "bezier_2d"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "control_points": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    "minItems": 6
+                  }
+                },
+                "required": [
+                  "control_points"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "box"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "b": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "b"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "box_2d"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "b": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "required": [
+                  "b"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "box_frame"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "b": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "e": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "b",
+                  "e"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "bspline_2d"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "control_points": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    "minItems": 4
+                  }
+                },
+                "required": [
+                  "control_points"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "capped_cone"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "h": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "r1": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "r2": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "h",
+                  "r1",
+                  "r2"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "capped_cylinder"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "h": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "r": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "h",
+                  "r"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "capped_torus"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "sc": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "ra": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "rb": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "sc",
+                  "ra",
+                  "rb"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "capsule"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "a": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "b": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "r": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "a",
+                  "b",
+                  "r"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "circle_2d"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "r": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "r"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "cone"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "c": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "h": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "c",
+                  "h"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "cut_sphere"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "r": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "h": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "r",
+                  "h"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "ellipsoid"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "r": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "r"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "gyroid"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "period": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "min_thickness": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "n_periods": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "period",
+                  "min_thickness",
+                  "n_periods"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "helix"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "major_r": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "pitch": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "r": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "n_turns": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "phase": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "handedness": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "major_r",
+                  "pitch",
+                  "r",
+                  "n_turns"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "hex_prism"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "h": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "required": [
+                  "h"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "leaf_spring"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "length": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "width": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "thickness": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "length",
+                  "width",
+                  "thickness"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "lidinoid"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "period": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "min_thickness": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "n_periods": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "period",
+                  "min_thickness",
+                  "n_periods"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "link"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "le": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "r1": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "r2": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "le",
+                  "r1",
+                  "r2"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "neovius"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "period": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "min_thickness": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "n_periods": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "period",
+                  "min_thickness",
+                  "n_periods"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "notch_hinge"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "width": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "depth": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "notch_radius": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "width",
+                  "depth",
+                  "notch_radius"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "octahedron"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "s": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "s"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "plane"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "n": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "h": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "n",
+                  "h"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "polygon_2d"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "vertices": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      "minItems": 2,
+                      "maxItems": 2
+                    },
+                    "minItems": 3
+                  }
+                },
+                "required": [
+                  "vertices"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "pyramid"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "h": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "h"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "raster_field"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "origin": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "spacing": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "dims": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "encoding": {
+                    "enum": [
+                      "f32le",
+                      "f16le"
+                    ]
+                  },
+                  "data": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "step_scale": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "provenance": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "origin",
+                  "spacing",
+                  "dims",
+                  "encoding",
+                  "data"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "round_box"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "b": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "r": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "b",
+                  "r"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "rounded_box_2d"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "b": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "r": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "b",
+                  "r"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "rounded_cylinder"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "ra": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "rb": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "h": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "ra",
+                  "rb",
+                  "h"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "schwarz_d"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "period": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "min_thickness": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "n_periods": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "period",
+                  "min_thickness",
+                  "n_periods"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "schwarz_p"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "period": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "min_thickness": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "n_periods": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "period",
+                  "min_thickness",
+                  "n_periods"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "screw_thread"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "r_root": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "depth": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "pitch": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "width": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "n_turns": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "phase": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "handedness": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "flank_deg": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "r_root",
+                  "depth",
+                  "pitch",
+                  "width",
+                  "n_turns"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "segment_2d"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "a": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "b": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "required": [
+                  "a",
+                  "b"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "serpentine"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "wavelength": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "beam_width": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "beam_height": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "n_periods": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "amplitude",
+                  "wavelength",
+                  "beam_width",
+                  "beam_height",
+                  "n_periods"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "solid_angle"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "c": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "ra": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "c",
+                  "ra"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "sphere"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "r": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "r"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "torus"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "t": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "required": [
+                  "t"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "trapezoid_2d"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "r1": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "r2": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "he": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "r1",
+                  "r2",
+                  "he"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "tri_prism"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "h": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  }
+                },
+                "required": [
+                  "h"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "primitive"
+              },
+              "kind": {
+                "const": "uneven_capsule_2d"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "r1": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "r2": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "h": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "r1",
+                  "r2",
+                  "h"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "op"
+              },
+              "op": {
+                "const": "intersect"
+              }
+            },
+            "required": [
+              "type",
+              "op"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "op"
+              },
+              "op": {
+                "const": "smooth_intersect"
+              }
+            },
+            "required": [
+              "type",
+              "op"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "k": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "k"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "op"
+              },
+              "op": {
+                "const": "smooth_subtract"
+              }
+            },
+            "required": [
+              "type",
+              "op"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "k": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "k"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "op"
+              },
+              "op": {
+                "const": "smooth_union"
+              }
+            },
+            "required": [
+              "type",
+              "op"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "k": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "k"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "op"
+              },
+              "op": {
+                "const": "softmin_chunked"
+              }
+            },
+            "required": [
+              "type",
+              "op"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "k": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "chunk_size": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "k"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "op"
+              },
+              "op": {
+                "const": "softmin_many"
+              }
+            },
+            "required": [
+              "type",
+              "op"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "k": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "k"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "op"
+              },
+              "op": {
+                "const": "subtract"
+              }
+            },
+            "required": [
+              "type",
+              "op"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "op"
+              },
+              "op": {
+                "const": "union"
+              }
+            },
+            "required": [
+              "type",
+              "op"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "transform"
+              },
+              "transform": {
+                "const": "canonical_sector_fold"
+              }
+            },
+            "required": [
+              "type",
+              "transform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "n_sectors": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "centered": {
+                    "type": "boolean"
+                  },
+                  "phase_frac": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "n_sectors"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "transform"
+              },
+              "transform": {
+                "const": "mirror"
+              }
+            },
+            "required": [
+              "type",
+              "transform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "n": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 3
+                  },
+                  "o": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "n",
+                  "o"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "transform"
+              },
+              "transform": {
+                "const": "repeat_finite"
+              }
+            },
+            "required": [
+              "type",
+              "transform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "c": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "l": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "c",
+                  "l"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "transform"
+              },
+              "transform": {
+                "const": "repeat_inf"
+              }
+            },
+            "required": [
+              "type",
+              "transform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "c": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "c"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "transform"
+              },
+              "transform": {
+                "const": "rotate_matrix"
+              }
+            },
+            "required": [
+              "type",
+              "transform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "R": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      "minItems": 3,
+                      "maxItems": 3
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "R"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "transform"
+              },
+              "transform": {
+                "const": "rotate_x"
+              }
+            },
+            "required": [
+              "type",
+              "transform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "angle": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "angle"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "transform"
+              },
+              "transform": {
+                "const": "rotate_y"
+              }
+            },
+            "required": [
+              "type",
+              "transform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "angle": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "angle"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "transform"
+              },
+              "transform": {
+                "const": "rotate_z"
+              }
+            },
+            "required": [
+              "type",
+              "transform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "angle": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "angle"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "transform"
+              },
+              "transform": {
+                "const": "scale"
+              }
+            },
+            "required": [
+              "type",
+              "transform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "s": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "s"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "transform"
+              },
+              "transform": {
+                "const": "translate"
+              }
+            },
+            "required": [
+              "type",
+              "transform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "t": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "t"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "modifier"
+              },
+              "modifier": {
+                "const": "elongate"
+              }
+            },
+            "required": [
+              "type",
+              "modifier"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "h": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "h"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "modifier"
+              },
+              "modifier": {
+                "const": "onion"
+              }
+            },
+            "required": [
+              "type",
+              "modifier"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "thickness": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "thickness"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "modifier"
+              },
+              "modifier": {
+                "const": "round"
+              }
+            },
+            "required": [
+              "type",
+              "modifier"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "r": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "r"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "deform"
+              },
+              "deform": {
+                "const": "bend"
+              }
+            },
+            "required": [
+              "type",
+              "deform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "k": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "k"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "deform"
+              },
+              "deform": {
+                "const": "displace"
+              }
+            },
+            "required": [
+              "type",
+              "deform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            },
+            "required": [
+              "field"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "deform"
+              },
+              "deform": {
+                "const": "twist"
+              }
+            },
+            "required": [
+              "type",
+              "deform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "k": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "k"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "deform"
+              },
+              "deform": {
+                "const": "twist_linear"
+              }
+            },
+            "required": [
+              "type",
+              "deform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "axis": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2
+                  },
+                  "u0": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "u1": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "angle_0": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "angle_1": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "u0",
+                  "u1",
+                  "angle_0",
+                  "angle_1"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "deform"
+              },
+              "deform": {
+                "const": "twist_radial"
+              }
+            },
+            "required": [
+              "type",
+              "deform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "r0": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "r1": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "angle_inner": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "angle_outer": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "r0",
+                  "r1",
+                  "angle_inner",
+                  "angle_outer"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "2d_to_3d"
+              },
+              "method": {
+                "const": "extrusion"
+              }
+            },
+            "required": [
+              "type",
+              "method"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "h": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "h"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "2d_to_3d"
+              },
+              "method": {
+                "const": "revolution"
+              }
+            },
+            "required": [
+              "type",
+              "method"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "offset": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "unevaluatedProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "field"
+            },
+            "kind": {
+              "type": "string",
+              "minLength": 1
+            },
+            "params": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "field_op"
+            },
+            "op": {
+              "type": "string",
+              "minLength": 1
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/field"
+              },
+              "minItems": 1
+            },
+            "params": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "op",
+            "children"
+          ]
+        }
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "field"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "angular",
+                  "radial",
+                  "sin_xyz"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "field_op"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "op": {
+                "enum": [
+                  "add"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "field"
+              },
+              "kind": {
+                "const": "angular"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "freq": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "amplitude": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "phase": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "freq"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "field"
+              },
+              "kind": {
+                "const": "radial"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "freq": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "amplitude": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "phase": {
+                    "$ref": "#/$defs/scalarValue"
+                  }
+                },
+                "required": [
+                  "freq"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "field"
+              },
+              "kind": {
+                "const": "sin_xyz"
+              }
+            },
+            "required": [
+              "type",
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "freq": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "amplitude": {
+                    "$ref": "#/$defs/scalarValue"
+                  },
+                  "phase": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/$defs/scalarValue"
+                    },
+                    "minItems": 3,
+                    "maxItems": 3
+                  }
+                },
+                "required": [
+                  "freq"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "field_op"
+              },
+              "op": {
+                "const": "add"
+              }
+            },
+            "required": [
+              "type",
+              "op"
+            ]
+          },
+          "then": {
+            "properties": {
+              "params": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "expr": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "unevaluatedProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "type": {
+              "const": "num"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "param"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "metric"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "args": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "unop"
+            },
+            "op": {
+              "enum": [
+                "neg",
+                "abs",
+                "sqrt",
+                "log",
+                "exp",
+                "square"
+              ]
+            },
+            "child": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "required": [
+            "op",
+            "child"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "binop"
+            },
+            "op": {
+              "enum": [
+                "+",
+                "-",
+                "*",
+                "/",
+                "pow",
+                "min",
+                "max"
+              ]
+            },
+            "lhs": {
+              "$ref": "#/$defs/expr"
+            },
+            "rhs": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "required": [
+            "op",
+            "lhs",
+            "rhs"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "reduce"
+            },
+            "op": {
+              "enum": [
+                "sum",
+                "mean",
+                "min",
+                "max"
+              ]
+            },
+            "children": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/expr"
+              },
+              "minItems": 1
+            }
+          },
+          "required": [
+            "op",
+            "children"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "dof"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      ]
+    },
+    "nodeRef": {
+      "type": "object",
+      "required": [
+        "$node"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "$node": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "paramRef": {
+      "type": "object",
+      "required": [
+        "$ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "$ref": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "scalarValue": {
+      "oneOf": [
+        {
+          "type": "number"
+        },
+        {
+          "$ref": "#/$defs/paramRef"
+        },
+        {
+          "$ref": "#/$defs/expr"
+        }
+      ]
+    },
+    "region": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/nodeRef"
+        },
+        {
+          "$ref": "#/$defs/sdf"
+        }
+      ]
+    },
+    "kinematics": {
+      "description": "Declarative motion model. A point is assigned to the body or flexure whose `region` SDF is smallest (nearest-region ownership). A body moves rigidly by its DOF-parameterized `motion`; a flexure interpolates the motions of `from_body` and `to_body` by a spatial `blend` field in [0,1]. Vanishes to identity when all DOFs are 0.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dofs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/dof"
+          }
+        },
+        "bodies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/body"
+          }
+        },
+        "flexures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/flexure"
+          }
+        }
+      }
+    },
+    "dof": {
+      "description": "An animation degree of freedom. Distinct from optimization `params`; referenced in motion exprs via {\"type\":\"dof\"}. `range` is required so viewers can auto-build a per-DOF scrub animation with zero authoring; `rate` is the nominal sweep rate in unit/s (viewers default to range/4s when absent).",
+      "type": "object",
+      "required": [
+        "name",
+        "kind",
+        "range",
+        "unit"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "angle",
+            "length"
+          ]
+        },
+        "range": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "default": {
+          "type": "number"
+        },
+        "rate": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "unit": {
+          "enum": [
+            "rad",
+            "deg",
+            "mm"
+          ]
+        }
+      }
+    },
+    "body": {
+      "description": "A rigid region. `region` SDF defines membership; `motion` is a DOF-parameterized rigid transform (empty ops => fixed/ground).",
+      "type": "object",
+      "required": [
+        "name",
+        "region",
+        "motion"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "motion": {
+          "$ref": "#/$defs/motion"
+        }
+      }
+    },
+    "flexure": {
+      "description": "A compliant region whose transform interpolates the motions of two bodies. `blend` is a scalar field in [0,1]: 0 -> from_body, 1 -> to_body. Interpolation is in joint-coordinate space (e.g. angle lerp for revolute bodies on a shared axis; screw interp in general).",
+      "type": "object",
+      "required": [
+        "name",
+        "region",
+        "from_body",
+        "to_body",
+        "blend"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "from_body": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to_body": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blend": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/field"
+            },
+            {
+              "type": "object",
+              "required": [
+                "type",
+                "kind",
+                "params"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "type": {
+                  "const": "field"
+                },
+                "kind": {
+                  "const": "axis_ramp"
+                },
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "axis",
+                    "lo",
+                    "hi"
+                  ],
+                  "properties": {
+                    "axis": {
+                      "$ref": "#/$defs/vec3"
+                    },
+                    "lo": {
+                      "type": "number"
+                    },
+                    "hi": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "motion": {
+      "description": "An ordered list of DOF-parameterized rigid ops, composed left-to-right. Empty => identity.",
+      "type": "object",
+      "required": [
+        "ops"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/motionOp"
+          }
+        }
+      }
+    },
+    "motionOp": {
+      "type": "object",
+      "required": [
+        "kind",
+        "axis"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "kind": {
+              "const": "rotate"
+            },
+            "axis": {
+              "$ref": "#/$defs/vec3"
+            },
+            "origin": {
+              "$ref": "#/$defs/vec3"
+            },
+            "angle": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "required": [
+            "angle"
+          ]
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "translate"
+            },
+            "axis": {
+              "$ref": "#/$defs/vec3"
+            },
+            "distance": {
+              "$ref": "#/$defs/expr"
+            }
+          },
+          "required": [
+            "distance"
+          ]
+        }
+      ]
+    }
+  }
+}

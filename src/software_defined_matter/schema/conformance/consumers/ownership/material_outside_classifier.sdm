@@ -1,0 +1,60 @@
+{
+  "schema_version": "0.2",
+  "name": "material_outside_classifier",
+  "params": {},
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "actual material",
+      "sdf_tree": {
+        "type": "primitive",
+        "kind": "sphere",
+        "params": {
+          "r": 5
+        }
+      }
+    }
+  ],
+  "kinematics": {
+    "dofs": [
+      {
+        "name": "shift",
+        "kind": "length",
+        "unit": "mm",
+        "range": [
+          -10,
+          10
+        ],
+        "default": 0
+      }
+    ],
+    "bodies": [
+      {
+        "name": "owner",
+        "region": {
+          "type": "primitive",
+          "kind": "sphere",
+          "params": {
+            "r": 1
+          }
+        },
+        "motion": {
+          "ops": [
+            {
+              "kind": "translate",
+              "axis": [
+                1,
+                0,
+                0
+              ],
+              "distance": {
+                "type": "dof",
+                "name": "shift"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

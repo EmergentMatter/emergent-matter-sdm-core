@@ -1,0 +1,56 @@
+{
+  "schema_version": "0.2",
+  "name": "conformance_consumer_components_union",
+  "metadata": {
+    "bbox": [
+      [
+        -10,
+        -10,
+        -10
+      ],
+      [
+        10,
+        10,
+        10
+      ]
+    ],
+    "components": [
+      "ball",
+      "cube"
+    ]
+  },
+  "params": {},
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "body",
+      "sdf_tree": {
+        "type": "op",
+        "op": "union",
+        "children": [
+          {
+            "type": "primitive",
+            "kind": "sphere",
+            "params": {
+              "r": 5.0
+            }
+          },
+          {
+            "type": "primitive",
+            "kind": "box",
+            "params": {
+              "b": [
+                3.0,
+                3.0,
+                3.0
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "objectives": [],
+  "constraints": [],
+  "history": []
+}

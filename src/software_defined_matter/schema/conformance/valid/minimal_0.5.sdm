@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.5",
+  "kind": "part",
+  "name": "conformance_ports",
+  "metadata": {},
+  "params": {
+    "height": {
+      "name": "height",
+      "value": 2.0,
+      "free": false,
+      "bounds": null,
+      "unit": "mm"
+    }
+  },
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "solid",
+      "sdf_tree": {
+        "type": "primitive",
+        "kind": "sphere",
+        "params": {
+          "r": 1
+        }
+      }
+    }
+  ],
+  "ports": [
+    {
+      "name": "top",
+      "frame": {
+        "position": [
+          0,
+          0,
+          {
+            "$ref": "height"
+          }
+        ],
+        "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "body": null,
+      "domains": {},
+      "sdf_tree": null,
+      "metadata": {}
+    }
+  ],
+  "objectives": [],
+  "constraints": [],
+  "history": []
+}

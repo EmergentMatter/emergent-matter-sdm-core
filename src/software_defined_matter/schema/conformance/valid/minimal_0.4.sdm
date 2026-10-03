@@ -1,0 +1,152 @@
+{
+  "schema_version": "0.4",
+  "name": "radial flexure",
+  "metadata": {},
+  "params": {},
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "solid",
+      "sdf_tree": {
+        "type": "primitive",
+        "kind": "box",
+        "params": {
+          "b": [
+            3,
+            3,
+            3
+          ]
+        }
+      }
+    }
+  ],
+  "objectives": [],
+  "constraints": [],
+  "history": [],
+  "kinematics": {
+    "dofs": [
+      {
+        "name": "q",
+        "kind": "angle",
+        "unit": "rad",
+        "range": [
+          -15,
+          15
+        ]
+      },
+      {
+        "name": "r",
+        "kind": "angle",
+        "unit": "rad",
+        "range": [
+          -15,
+          15
+        ]
+      }
+    ],
+    "bodies": [
+      {
+        "name": "inner",
+        "region": {
+          "type": "primitive",
+          "kind": "sphere",
+          "params": {
+            "r": 0.2
+          }
+        },
+        "motion": {
+          "ops": [
+            {
+              "kind": "rotate",
+              "axis": [
+                0,
+                0,
+                1
+              ],
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "angle": {
+                "type": "dof",
+                "name": "q"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "outer",
+        "region": {
+          "type": "primitive",
+          "kind": "box",
+          "params": {
+            "b": [
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "motion": {
+          "ops": [
+            {
+              "kind": "rotate",
+              "axis": [
+                0,
+                0,
+                1
+              ],
+              "origin": [
+                0,
+                0,
+                0
+              ],
+              "angle": {
+                "type": "dof",
+                "name": "r"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "flexures": [
+      {
+        "name": "blade",
+        "from_body": "inner",
+        "to_body": "outer",
+        "region": {
+          "type": "primitive",
+          "kind": "box",
+          "params": {
+            "b": [
+              3,
+              3,
+              3
+            ]
+          }
+        },
+        "blend": {
+          "type": "field",
+          "kind": "radial_hermite",
+          "params": {
+            "axis": [
+              0,
+              0,
+              1
+            ],
+            "origin": [
+              0,
+              0,
+              0
+            ],
+            "r0": 0.0,
+            "r1": 2.0
+          }
+        }
+      }
+    ]
+  }
+}

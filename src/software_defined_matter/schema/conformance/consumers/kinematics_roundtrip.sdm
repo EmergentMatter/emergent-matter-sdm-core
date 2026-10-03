@@ -1,0 +1,84 @@
+{
+  "schema_version": "0.3",
+  "name": "conformance_consumer_kinematics_roundtrip",
+  "metadata": {},
+  "params": {},
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "body",
+      "sdf_tree": {
+        "type": "primitive",
+        "kind": "sphere",
+        "params": {
+          "r": 1.0
+        },
+        "name": "ball"
+      }
+    }
+  ],
+  "objectives": [],
+  "constraints": [],
+  "history": [],
+  "kinematics": {
+    "dofs": [
+      {
+        "name": "angle",
+        "kind": "angle",
+        "range": [
+          -1,
+          1
+        ],
+        "default": 0,
+        "unit": "rad"
+      }
+    ],
+    "bodies": [
+      {
+        "name": "ball",
+        "region": {
+          "$node": "ball"
+        },
+        "motion": {
+          "ops": [
+            {
+              "kind": "rotate",
+              "axis": [
+                0,
+                0,
+                1
+              ],
+              "angle": {
+                "type": "dof",
+                "name": "angle"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "flexures": [
+      {
+        "name": "blend",
+        "region": {
+          "$node": "ball"
+        },
+        "from_body": "ball",
+        "to_body": "ball",
+        "blend": {
+          "type": "field",
+          "kind": "axis_ramp",
+          "params": {
+            "axis": [
+              0,
+              0,
+              1
+            ],
+            "lo": -1,
+            "hi": 1
+          }
+        }
+      }
+    ]
+  }
+}

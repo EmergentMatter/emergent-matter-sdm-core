@@ -1,0 +1,56 @@
+{
+  "schema_version": "0.2",
+  "name": "conformance_consumer_field_sin_xyz_amplitude",
+  "metadata": {
+    "bbox": [
+      [
+        -20,
+        -20,
+        -20
+      ],
+      [
+        20,
+        20,
+        20
+      ]
+    ]
+  },
+  "params": {},
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "body",
+      "sdf_tree": {
+        "type": "deform",
+        "deform": "displace",
+        "child": {
+          "type": "primitive",
+          "kind": "sphere",
+          "params": {
+            "r": 10.0
+          }
+        },
+        "field": {
+          "type": "field",
+          "kind": "sin_xyz",
+          "params": {
+            "freq": [
+              0.1,
+              0.1,
+              0.1
+            ],
+            "amplitude": 0.3,
+            "phase": [
+              0.0,
+              0.0,
+              0.0
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "objectives": [],
+  "constraints": [],
+  "history": []
+}

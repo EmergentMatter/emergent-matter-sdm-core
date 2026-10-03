@@ -1,0 +1,38 @@
+{
+  "schema_version": "0.2",
+  "name": "conformance_invalid_3d_inside_extrusion_child",
+  "params": {
+    "radius": {
+      "name": "radius",
+      "value": 5.0,
+      "free": true,
+      "bounds": [
+        1.0,
+        10.0
+      ],
+      "unit": "mm"
+    }
+  },
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "PLA",
+      "sdf_tree": {
+        "type": "2d_to_3d",
+        "method": "extrusion",
+        "params": {
+          "h": 10.0
+        },
+        "child": {
+          "type": "primitive",
+          "kind": "sphere",
+          "params": {
+            "r": {
+              "$ref": "radius"
+            }
+          }
+        }
+      }
+    }
+  ]
+}

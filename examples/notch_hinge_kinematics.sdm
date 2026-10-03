@@ -1,0 +1,316 @@
+{
+  "schema_version": "0.6",
+  "kind": "part",
+  "name": "notch_hinge_kinematics",
+  "metadata": {
+    "bbox": [
+      [
+        -21.0,
+        -9.0,
+        -9.0
+      ],
+      [
+        21.0,
+        9.0,
+        9.0
+      ]
+    ],
+    "units": "mm",
+    "process": "SLS",
+    "author": "Emergent Matter",
+    "note": "Kinematics reference: two rigid blocks joined by a notch-hinge neck, one revolute DOF (flex, deg). block_fixed is ground; block_moving rotates about Z through the origin; the neck is a flexure blending the two across X. Identity at flex=0. Y bbox is widened past the rest shape to contain the swept pose. Regenerate with examples/build_notch_hinge_kinematics.py."
+  },
+  "params": {
+    "beam_width": {
+      "name": "beam_width",
+      "value": 8.0,
+      "free": false,
+      "bounds": [
+        4.0,
+        20.0
+      ],
+      "unit": "mm",
+      "ui": {
+        "step": 0.5,
+        "group": "hinge",
+        "order": 1
+      }
+    },
+    "beam_depth": {
+      "name": "beam_depth",
+      "value": 8.0,
+      "free": false,
+      "bounds": [
+        2.0,
+        20.0
+      ],
+      "unit": "mm",
+      "ui": {
+        "step": 0.5,
+        "group": "hinge",
+        "order": 2
+      }
+    },
+    "notch_radius": {
+      "name": "notch_radius",
+      "value": 1.5,
+      "free": true,
+      "bounds": [
+        0.2,
+        1.9
+      ],
+      "unit": "mm",
+      "ui": {
+        "step": 0.05,
+        "group": "hinge",
+        "order": 3
+      }
+    }
+  },
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "nylon12_sls",
+      "sdf_tree": {
+        "type": "op",
+        "op": "union",
+        "children": [
+          {
+            "type": "transform",
+            "transform": "translate",
+            "child": {
+              "type": "primitive",
+              "kind": "box",
+              "params": {
+                "b": [
+                  8.0,
+                  4.0,
+                  8.0
+                ]
+              }
+            },
+            "params": {
+              "t": [
+                -12.0,
+                0.0,
+                0.0
+              ]
+            },
+            "name": "block_fixed"
+          },
+          {
+            "type": "transform",
+            "transform": "scale_axis",
+            "child": {
+              "type": "primitive",
+              "kind": "notch_hinge",
+              "params": {
+                "width": {
+                  "$ref": "beam_width"
+                },
+                "depth": {
+                  "$ref": "beam_depth"
+                },
+                "notch_radius": {
+                  "$ref": "notch_radius"
+                }
+              }
+            },
+            "params": {
+              "s": [
+                1.0,
+                1.0,
+                2.0
+              ]
+            },
+            "name": "hinge_neck"
+          },
+          {
+            "type": "transform",
+            "transform": "translate",
+            "child": {
+              "type": "primitive",
+              "kind": "box",
+              "params": {
+                "b": [
+                  8.0,
+                  4.0,
+                  8.0
+                ]
+              }
+            },
+            "params": {
+              "t": [
+                12.0,
+                0.0,
+                0.0
+              ]
+            },
+            "name": "block_moving"
+          }
+        ]
+      }
+    }
+  ],
+  "ports": [
+    {
+      "name": "ground",
+      "frame": {
+        "position": [
+          -20.0,
+          0.0,
+          0.0
+        ],
+        "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "body": "block_fixed",
+      "domains": {},
+      "sdf_tree": null,
+      "metadata": {}
+    },
+    {
+      "name": "tip",
+      "frame": {
+        "position": [
+          20.0,
+          0.0,
+          0.0
+        ],
+        "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "body": "block_moving",
+      "domains": {},
+      "sdf_tree": null,
+      "metadata": {}
+    }
+  ],
+  "objectives": [
+    {
+      "name": "mass",
+      "sense": "minimize",
+      "expr": {
+        "type": "metric",
+        "name": "mass",
+        "args": {
+          "density": 0.00093
+        }
+      },
+      "weight": 1.0
+    }
+  ],
+  "constraints": [
+    {
+      "name": "neck_thickness_printable",
+      "expr": {
+        "type": "binop",
+        "op": "-",
+        "lhs": {
+          "type": "param",
+          "name": "beam_depth"
+        },
+        "rhs": {
+          "type": "binop",
+          "op": "*",
+          "lhs": {
+            "type": "num",
+            "value": 4.0
+          },
+          "rhs": {
+            "type": "param",
+            "name": "notch_radius"
+          }
+        }
+      },
+      "op": ">=",
+      "rhs": 0.5,
+      "tolerance": 0.0
+    }
+  ],
+  "history": [],
+  "kinematics": {
+    "dofs": [
+      {
+        "name": "flex",
+        "kind": "angle",
+        "range": [
+          -10.0,
+          10.0
+        ],
+        "default": 0.0,
+        "rate": 5.0,
+        "unit": "deg"
+      }
+    ],
+    "bodies": [
+      {
+        "name": "block_fixed",
+        "region": {
+          "$node": "block_fixed"
+        },
+        "motion": {
+          "ops": []
+        }
+      },
+      {
+        "name": "block_moving",
+        "region": {
+          "$node": "block_moving"
+        },
+        "motion": {
+          "ops": [
+            {
+              "kind": "rotate",
+              "axis": [
+                0,
+                0,
+                1
+              ],
+              "origin": [
+                0.0,
+                0.0,
+                0.0
+              ],
+              "angle": {
+                "type": "dof",
+                "name": "flex"
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "flexures": [
+      {
+        "name": "hinge_neck",
+        "region": {
+          "$node": "hinge_neck"
+        },
+        "from_body": "block_fixed",
+        "to_body": "block_moving",
+        "blend": {
+          "type": "field",
+          "kind": "axis_ramp",
+          "params": {
+            "axis": [
+              1.0,
+              0.0,
+              0.0
+            ],
+            "lo": -4.0,
+            "hi": 4.0
+          }
+        }
+      }
+    ]
+  }
+}

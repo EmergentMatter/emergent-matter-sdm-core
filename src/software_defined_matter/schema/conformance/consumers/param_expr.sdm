@@ -1,0 +1,67 @@
+{
+  "schema_version": "0.3",
+  "name": "conformance_consumer_param_expr",
+  "metadata": {
+    "bbox": [
+      [
+        -30,
+        -30,
+        -30
+      ],
+      [
+        30,
+        30,
+        30
+      ]
+    ]
+  },
+  "params": {
+    "radius": {
+      "name": "radius",
+      "value": 5.0,
+      "free": true,
+      "bounds": [
+        1.0,
+        20.0
+      ],
+      "unit": "mm"
+    },
+    "diameter": {
+      "name": "diameter",
+      "value": 10.0,
+      "free": false,
+      "bounds": null,
+      "unit": "mm",
+      "expr": {
+        "type": "binop",
+        "op": "*",
+        "lhs": {
+          "type": "num",
+          "value": 2.0
+        },
+        "rhs": {
+          "type": "param",
+          "name": "radius"
+        }
+      }
+    }
+  },
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "body",
+      "sdf_tree": {
+        "type": "primitive",
+        "kind": "sphere",
+        "params": {
+          "r": {
+            "$ref": "diameter"
+          }
+        }
+      }
+    }
+  ],
+  "objectives": [],
+  "constraints": [],
+  "history": []
+}

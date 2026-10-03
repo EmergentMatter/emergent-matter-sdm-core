@@ -1,0 +1,34 @@
+{
+  "fixture": "polygon_table.sdm",
+  "notes": "Above the table threshold: vertices ship in poly_table; scene calls sdm_polygon_2d_tab.",
+  "pending": null,
+  "roundtrip": {
+    "load_save": true,
+    "cli": true
+  },
+  "emission": {
+    "status": "ok",
+    "entry_point": "sdf_scene",
+    "lib_functions": [
+      "sdm_cut_plane",
+      "sdm_polygon_2d_tab",
+      "sdm_rest_point"
+    ],
+    "component_labels": [],
+    "component_machines": [],
+    "poly_max_n": 600,
+    "poly_table_len": 1202,
+    "poly_tex_width": 1024,
+    "control_classes": {},
+    "uniform_sources": [],
+    "scene_needles": [
+      "sdm_polygon_2d_tab"
+    ],
+    "macros_required": [
+      "SDM_POLY_TABLE",
+      "SDM_POLY_LEN",
+      "SDM_POLY_TEX_W",
+      "SDM_POLY_MAX_N"
+    ]
+  }
+}

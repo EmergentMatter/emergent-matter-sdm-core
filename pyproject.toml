@@ -1,0 +1,239 @@
+[project]
+name = "emergent-matter-sdm-core"
+version = "0.0.0"
+description = "The Software Defined Matter ecosystem's core library, including the SDM schema definition and SDM's auto differentiable primitive set built to perform multi-physics and multi-material design and analysis."
+readme = "README.md"
+requires-python = ">=3.13"
+license = "Apache-2.0"
+authors = [{ name = "Emergent Matter" }]
+keywords = [
+    "software-defined-matter",
+    "additive-manufacturing",
+    "signed-distance-functions",
+    "computational-geometry",
+    "jax",
+    "parametric-design",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Manufacturing",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Typing :: Typed",
+]
+dependencies = [
+    "jax>=0.11.0",
+    "jaxlib>=0.11.0",
+    "jsonschema>=4.0",
+    "numpy>=1.26",
+    "emergent-matter-sdm-materials>=1.0,<2",
+]
+
+[project.urls]
+Homepage = "https://github.com/EmergentMatter/emergent-matter-sdm-core"
+Repository = "https://github.com/EmergentMatter/emergent-matter-sdm-core"
+Issues = "https://github.com/EmergentMatter/emergent-matter-sdm-core/issues"
+Changelog = "https://github.com/EmergentMatter/emergent-matter-sdm-core/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+# Manufacturing-fidelity mesh export (software_defined_matter.export).
+# Kept optional so the core stays lean for optimiser / CI use and the
+# preview path never pulls trimesh. Versions match the org's standard
+# JAX-SDF export stack used elsewhere.
+export = [
+    "scikit-image>=0.21",
+    "trimesh>=4.0",
+    "fast-simplification>=0.1",
+    # trimesh computes exact point-to-mesh distances through an rtree index.
+    # Without it the decimation deviation budget cannot be measured at all.
+    "rtree>=1.0",
+    # Transitive via scikit-image -> imageio. Not imported directly, but
+    # pinned here as a floor so the resolver cannot settle on a pre-CVE
+    # release (GHSA advisories fixed in 12.3.0). Duplicated in the
+    # `preview` extra below, which pulls the same package via a different
+    # path (pyvista -> matplotlib).
+    "pillow>=12.3.0",
+]
+
+# Fast, display-only PyVista preview (software_defined_matter.preview).
+# Kept optional, same reasoning as `export` above: an optimiser / CI
+# install has no use for a VTK-backed viewer, and pyvista pulls in vtk,
+# matplotlib and cyclopts. preview_part() raises a clear install hint on
+# ImportError rather than failing on a bare "no module named pyvista".
+preview = [
+    "pyvista>=0.49.0",
+    # See the comment on the `export` extra's own pillow floor above.
+    "pillow>=12.3.0",
+]
+
+# CI runs `uv sync --locked`, which installs [dependency-groups] but NOT
+# [project.optional-dependencies] -- a clean from-lockfile install would
+# otherwise have no pytest and no ruff, so the lint step would fail with
+# "Failed to spawn: ruff" (masked by continue-on-error) and the test step
+# would fail outright. scikit-image, trimesh, fast-simplification, rtree
+# and pyvista are duplicated from the `export` and `preview` extras above
+# because the test suite exercises both paths too; the consumer-facing
+# extras themselves are untouched.
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-xdist>=3.5",
+    "scikit-image>=0.21",
+    "trimesh>=5.0",
+    "fast-simplification>=0.1",
+    "rtree>=1.0",
+    "pyvista>=0.48.0",
+    # The ruleset now lives in ruff-base.toml (org-managed), not in an exact
+    # pin here, so a floor specifier is safe again.
+    "ruff>=0.16",
+    "mypy>=1.14",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# explicit = true is required: our package names must only ever resolve
+# from our own index, never fall through to public PyPI.
+[[tool.uv.index]]
+name = "em"
+url = "https://get.softwaredefinedmatter.com/simple"
+explicit = true
+
+[tool.uv.sources]
+emergent-matter-sdm-materials = { index = "em" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/software_defined_matter"]
+
+[tool.hatch.build.targets.sdist]
+# CLAUDE.md is agent-only guidance, not something an sdist on a public
+# index should ship. Everything else the default sdist collects (tests,
+# docs, uv.lock) stays, since it's needed to build from source and isn't
+# sensitive.
+exclude = ["CLAUDE.md"]
+
+[tool.hatch.build]
+include = [
+    "src/software_defined_matter/**/*.py",
+    "src/software_defined_matter/schema/*.json",
+    "src/software_defined_matter/schema/conformance/**/*",
+    "src/software_defined_matter/glsl/lib.glsl",
+    "src/software_defined_matter/py.typed",
+]
+
+# Copy this block into your repo's pyproject.toml to opt into release control.
+# See docs/onboarding.md in EmergentMatter/actions for the full walkthrough,
+# and templates/CONTRIBUTING.md for the contributor-facing half.
+
+# ── towncrier: turns changelog.d/ notes into CHANGELOG.md ─────────────────
+#
+# Exactly three fragment types, matching the three bump levels the release
+# workflow understands (see EmergentMatter/actions CONTRACT.md). Do not add
+# a fourth type: compute_bump.py only recognizes major/minor/patch and
+# exits 1 on anything else.
+[tool.towncrier]
+directory = "changelog.d"          # where `uv run scripts/changeset.py` writes notes
+filename = "CHANGELOG.md"
+# Insert this marker into CHANGELOG.md once, above your existing history.
+# towncrier writes new release sections directly below it and never touches
+# anything beneath; see docs/onboarding.md for inserting it into a
+# hand-written changelog without disturbing prior entries.
+start_string = "<!-- towncrier release notes start -->\n"
+title_format = "## {version} ({project_date})"
+underlines = ["-", "~", "^"]
+
+[[tool.towncrier.type]]
+directory = "major"
+name = "Major"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "minor"
+name = "Minor"
+showcontent = true
+
+[[tool.towncrier.type]]
+directory = "patch"
+name = "Patch"
+showcontent = true
+
+# ── em-release: tells sync_version.py every place the version string lives ──
+#
+# One entry per "path:symbol" location, beyond `[project] version` itself
+# (that one is handled separately, by `uv version --bump` in the release
+# workflow, do not list it here).
+#
+# Every location you list gets written on every release. Anything you don't
+# list is never touched: that's deliberate, so a data/schema version that
+# is meant to move independently of the package version is safe just by
+# being left off this list. See docs/onboarding.md for the
+# emergent-matter-sdm-materials worked example, where __catalog_version__ *is*
+# listed because it's meant to track the package version in lockstep.
+[tool.em-release]
+tier = "open"
+templates_version = "v1.15.0"
+version_files = [
+
+]
+
+# ── mypy ────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.13"
+disallow_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+# These JAX kernel modules are deliberately unannotated -- JAX's tracing
+# style (shape-polymorphic arrays, pytree-generic helpers) does not fit
+# useful type hints, and the org standard's per-module relaxation exists
+# for exactly this case. Not project-wide.
+[[tool.mypy.overrides]]
+module = [
+    "software_defined_matter.sdf.sdf_shapes",
+    "software_defined_matter.sdf.sdf_ops",
+    "software_defined_matter.sdf.transforms",
+    "software_defined_matter.sdf._helpers",
+]
+disallow_untyped_defs = false
+
+# Untyped third-party deps this repo actually imports.
+[[tool.mypy.overrides]]
+module = [
+    "jax.*",
+    "jaxlib.*",
+    "pyvista.*",
+    "trimesh.*",
+    "skimage.*",
+    "scipy.*",
+    "jsonschema.*",
+    "fast_simplification.*",
+]
+ignore_missing_imports = true
+
+# process.py lazily imports this optional sibling package inside a
+# try/except ImportError (it is not a dependency of this repo, and CI never
+# installs it) -- mypy has no stubs or source to check against, so it is
+# silenced the same way as the untyped third-party deps above.
+[[tool.mypy.overrides]]
+module = ["emergent_matter_processes.*"]
+ignore_missing_imports = true
+
+# ── pytest ──────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+# No per-repo ignore entries needed: every test that exercises a
+# warning-emitting path (io.py / model.py schema_version mismatch,
+# process.py's process-profile warnings, dsl/expr.py and
+# objectives/metrics.py's metric_tau / metric_bbox_pad deprecations) wraps
+# it in `pytest.warns(...)`, which scopes its own filter and is unaffected
+# by "error" here. Verified: 775 passed, 5 skipped, no new failures.
+filterwarnings = ["error"]

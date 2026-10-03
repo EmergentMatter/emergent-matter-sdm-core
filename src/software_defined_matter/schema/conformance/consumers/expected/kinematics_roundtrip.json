@@ -1,0 +1,38 @@
+{
+  "fixture": "kinematics_roundtrip.sdm",
+  "notes": "Preserve rigid bodies and flexures on load/save. Full-part shader emission refuses unsupported flexures rather than silently showing a static field.",
+  "roundtrip": {
+    "load_save": true,
+    "cli": false
+  },
+  "emission": {
+    "status": "refused",
+    "refuse_substr": "Flexure interpolation is not supported"
+  },
+  "numerical": {
+    "points": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        1,
+        0,
+        0
+      ],
+      [
+        2,
+        0,
+        0
+      ]
+    ],
+    "jax_values": [
+      -1,
+      0,
+      1
+    ],
+    "jax_atol": 1e-05,
+    "free_vec": []
+  }
+}

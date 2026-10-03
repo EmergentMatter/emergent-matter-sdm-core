@@ -1,0 +1,32 @@
+{
+  "schema_version": "0.2",
+  "name": "conformance_invalid_wrong_wire_shape_vec",
+  "params": {
+    "radius": {
+      "name": "radius",
+      "value": 5.0,
+      "free": true,
+      "bounds": [
+        1.0,
+        10.0
+      ],
+      "unit": "mm"
+    }
+  },
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "PLA",
+      "sdf_tree": {
+        "type": "primitive",
+        "kind": "box",
+        "params": {
+          "b": [
+            5.0,
+            5.0
+          ]
+        }
+      }
+    }
+  ]
+}

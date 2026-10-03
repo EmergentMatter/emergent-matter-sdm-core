@@ -1,0 +1,270 @@
+{
+  "schema_version": "0.5",
+  "kind": "part",
+  "name": "hollow_cylinder_with_hinge",
+  "metadata": {
+    "version": "0.1",
+    "process": "FDM",
+    "author": "Emergent Matter",
+    "units": "mm",
+    "metric_voxel_size": 0.24,
+    "metric_grid_cap": 288
+  },
+  "params": {
+    "outer_radius": {
+      "name": "outer_radius",
+      "value": 20.0,
+      "free": true,
+      "bounds": [
+        10.0,
+        40.0
+      ],
+      "unit": "mm"
+    },
+    "inner_radius": {
+      "name": "inner_radius",
+      "value": 14.0,
+      "free": true,
+      "bounds": [
+        6.0,
+        30.0
+      ],
+      "unit": "mm"
+    },
+    "height": {
+      "name": "height",
+      "value": 30.0,
+      "free": false,
+      "bounds": null,
+      "unit": "mm"
+    },
+    "notch_radius": {
+      "name": "notch_radius",
+      "value": 3.0,
+      "free": true,
+      "bounds": [
+        1.0,
+        6.0
+      ],
+      "unit": "mm"
+    }
+  },
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "Cu",
+      "sdf_tree": {
+        "type": "op",
+        "op": "union",
+        "children": [
+          {
+            "type": "transform",
+            "transform": "translate",
+            "child": {
+              "type": "primitive",
+              "kind": "notch_hinge",
+              "params": {
+                "width": 8.0,
+                "depth": 8.0,
+                "notch_radius": {
+                  "$ref": "notch_radius"
+                }
+              }
+            },
+            "params": {
+              "t": [
+                0.0,
+                0.0,
+                30.0
+              ]
+            }
+          },
+          {
+            "type": "deform",
+            "deform": "displace",
+            "child": {
+              "type": "transform",
+              "transform": "translate",
+              "child": {
+                "type": "primitive",
+                "kind": "capped_cylinder",
+                "params": {
+                  "h": 1.0,
+                  "r": {
+                    "$ref": "outer_radius"
+                  }
+                }
+              },
+              "params": {
+                "t": [
+                  0.0,
+                  0.0,
+                  29.8
+                ]
+              }
+            },
+            "field": {
+              "type": "field",
+              "kind": "radial",
+              "params": {
+                "freq": 0.25,
+                "amplitude": 0.35,
+                "phase": 0.0
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "material_id": 2,
+      "name": "PLA",
+      "sdf_tree": {
+        "type": "op",
+        "op": "intersect",
+        "children": [
+          {
+            "type": "op",
+            "op": "subtract",
+            "children": [
+              {
+                "type": "primitive",
+                "kind": "capped_cylinder",
+                "params": {
+                  "h": {
+                    "$ref": "height"
+                  },
+                  "r": {
+                    "$ref": "outer_radius"
+                  }
+                }
+              },
+              {
+                "type": "primitive",
+                "kind": "capped_cylinder",
+                "params": {
+                  "h": {
+                    "$ref": "height"
+                  },
+                  "r": {
+                    "$ref": "inner_radius"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "type": "primitive",
+            "kind": "gyroid",
+            "params": {
+              "period": 8.0,
+              "min_thickness": 1.0,
+              "n_periods": [
+                10,
+                10,
+                8
+              ]
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "ports": [
+    {
+      "name": "bottom_flange",
+      "frame": {
+        "position": [
+          0.0,
+          0.0,
+          -30.0
+        ],
+        "orientation": [
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ]
+      },
+      "body": null,
+      "domains": {},
+      "sdf_tree": null,
+      "metadata": {
+        "joint_type": "fixed"
+      }
+    },
+    {
+      "name": "hinge_axis",
+      "frame": {
+        "position": [
+          0.0,
+          0.0,
+          30.0
+        ],
+        "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "body": null,
+      "domains": {},
+      "sdf_tree": null,
+      "metadata": {
+        "joint_type": "revolute",
+        "axis": [
+          0,
+          0,
+          1
+        ]
+      }
+    }
+  ],
+  "objectives": [
+    {
+      "name": "min_mass",
+      "sense": "minimize",
+      "expr": {
+        "type": "metric",
+        "name": "mass",
+        "args": {
+          "density": 8940.0
+        }
+      },
+      "weight": 1.0
+    }
+  ],
+  "constraints": [
+    {
+      "name": "wall_thickness",
+      "expr": {
+        "type": "binop",
+        "op": "-",
+        "lhs": {
+          "type": "param",
+          "name": "outer_radius"
+        },
+        "rhs": {
+          "type": "param",
+          "name": "inner_radius"
+        }
+      },
+      "op": ">=",
+      "rhs": 3.0,
+      "tolerance": 0.0
+    },
+    {
+      "name": "max_volume",
+      "expr": {
+        "type": "metric",
+        "name": "volume",
+        "args": {}
+      },
+      "op": "<=",
+      "rhs": 40000.0,
+      "tolerance": 0.0
+    }
+  ],
+  "history": []
+}

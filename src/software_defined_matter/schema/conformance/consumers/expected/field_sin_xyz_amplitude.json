@@ -1,0 +1,68 @@
+{
+  "fixture": "field_sin_xyz_amplitude.sdm",
+  "notes": "Displace a sphere with a sin_xyz field at non-default amplitude.",
+  "roundtrip": {
+    "load_save": true,
+    "cli": true
+  },
+  "emission": {
+    "status": "ok",
+    "entry_point": "sdf_scene",
+    "lib_functions": [
+      "field_sin_xyz",
+      "sdf_sphere",
+      "sdm_cut_plane",
+      "sdm_rest_point"
+    ],
+    "component_labels": [],
+    "component_machines": [],
+    "poly_max_n": 0,
+    "poly_table_len": 0,
+    "poly_tex_width": 0,
+    "control_classes": {},
+    "uniform_sources": [],
+    "scene_needles": [
+      "field_sin_xyz("
+    ],
+    "macros_forbidden": [
+      "SDM_POLY_TABLE"
+    ]
+  },
+  "numerical": {
+    "points": [
+      [
+        12.0,
+        0.0,
+        0.0
+      ],
+      [
+        10.0,
+        0.0,
+        0.0
+      ],
+      [
+        11.0,
+        1.0,
+        1.0
+      ],
+      [
+        0.0,
+        0.0,
+        12.0
+      ]
+    ],
+    "jax_values": [
+      2.0,
+      0.0,
+      1.1514585,
+      2.0
+    ],
+    "jax_atol": 1e-05,
+    "emitted_call_site": {
+      "pattern": "return field_sin_xyz\\(([^;]+)\\);",
+      "observed_on_this_tip": "p, vec3(0.1, 0.1, 0.1), 0.3, vec3(0.0, 0.0, 0.0)",
+      "correct": "p, vec3(0.1, 0.1, 0.1), 0.3, vec3(0.0, 0.0, 0.0)",
+      "assert": "correct"
+    }
+  }
+}

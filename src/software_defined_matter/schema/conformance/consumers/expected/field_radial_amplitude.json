@@ -1,0 +1,68 @@
+{
+  "fixture": "field_radial_amplitude.sdm",
+  "notes": "Displace a sphere with a radial field at non-default amplitude.",
+  "roundtrip": {
+    "load_save": true,
+    "cli": true
+  },
+  "emission": {
+    "status": "ok",
+    "entry_point": "sdf_scene",
+    "lib_functions": [
+      "field_radial",
+      "sdf_sphere",
+      "sdm_cut_plane",
+      "sdm_rest_point"
+    ],
+    "component_labels": [],
+    "component_machines": [],
+    "poly_max_n": 0,
+    "poly_table_len": 0,
+    "poly_tex_width": 0,
+    "control_classes": {},
+    "uniform_sources": [],
+    "scene_needles": [
+      "field_radial("
+    ],
+    "macros_forbidden": [
+      "SDM_POLY_TABLE"
+    ]
+  },
+  "numerical": {
+    "points": [
+      [
+        12.0,
+        0.0,
+        0.0
+      ],
+      [
+        10.0,
+        0.0,
+        0.0
+      ],
+      [
+        15.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        12.0,
+        0.0
+      ]
+    ],
+    "jax_values": [
+      2.14694619,
+      9e-08,
+      5.0,
+      2.14694619
+    ],
+    "jax_atol": 1e-05,
+    "emitted_call_site": {
+      "pattern": "return field_radial\\(([^;]+)\\);",
+      "observed_on_this_tip": "p, 0.2, 0.25, 0.0",
+      "correct": "p, 0.2, 0.25, 0.0",
+      "assert": "correct"
+    }
+  }
+}

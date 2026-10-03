@@ -1,0 +1,39 @@
+{
+  "schema_version": "0.3",
+  "name": "conformance_consumer_raster_field",
+  "metadata": {},
+  "params": {},
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "body",
+      "sdf_tree": {
+        "type": "primitive",
+        "kind": "raster_field",
+        "params": {
+          "origin": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "spacing": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "dims": [
+            3,
+            3,
+            3
+          ],
+          "encoding": "f32le",
+          "data": "AACAvwAAAAAAAIA/AACAvwAAAAAAAIA/AACAvwAAAAAAAIA/AACAvwAAAAAAAIA/AACAvwAAAAAAAIA/AACAvwAAAAAAAIA/AACAvwAAAAAAAIA/AACAvwAAAAAAAIA/AACAvwAAAAAAAIA/",
+          "step_scale": 1.0
+        }
+      }
+    }
+  ],
+  "objectives": [],
+  "constraints": [],
+  "history": []
+}

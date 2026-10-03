@@ -1,0 +1,27 @@
+.venv/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.DS_Store
+.cursor/
+.claude/
+*.egg-info/
+.eggs/
+src/**/*.egg-info/
+src/**/*.egg-info/**
+.vscode/
+
+# Generated mesh exports from examples/export_example.py
+examples/exports/
+
+# Local graphify tool artifacts (never part of the repo)
+.graphify/
+.graphifyy/

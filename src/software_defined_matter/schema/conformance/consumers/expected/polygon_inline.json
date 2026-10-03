@@ -1,0 +1,35 @@
+{
+  "fixture": "polygon_inline.sdm",
+  "notes": "Below the table threshold: vertices stay inline in the scene source.",
+  "pending": null,
+  "roundtrip": {
+    "load_save": true,
+    "cli": true
+  },
+  "emission": {
+    "status": "ok",
+    "entry_point": "sdf_scene",
+    "lib_functions": [
+      "sdf_polygon_2d",
+      "sdm_cut_plane",
+      "sdm_rest_point"
+    ],
+    "component_labels": [],
+    "component_machines": [],
+    "poly_max_n": 8,
+    "poly_table_len": 0,
+    "poly_tex_width": 0,
+    "control_classes": {},
+    "uniform_sources": [],
+    "scene_needles": [
+      "sdf_polygon_2d",
+      "vec2 V[SDM_POLY_MAX_N]"
+    ],
+    "macros_required": [
+      "SDM_POLY_MAX_N"
+    ],
+    "macros_forbidden": [
+      "SDM_POLY_TABLE"
+    ]
+  }
+}

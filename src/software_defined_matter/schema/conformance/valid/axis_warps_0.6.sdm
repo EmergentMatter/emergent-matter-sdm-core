@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.6",
+  "kind": "part",
+  "name": "conformance_axis_warps",
+  "params": {},
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "solid",
+      "sdf_tree": {
+        "type": "deform",
+        "deform": "taper_linear",
+        "params": {
+          "z0": -1,
+          "z1": 1,
+          "s_0": 1,
+          "s_1": 0.5
+        },
+        "child": {
+          "type": "transform",
+          "transform": "scale_axis",
+          "params": {
+            "s": [
+              1,
+              2,
+              1
+            ]
+          },
+          "child": {
+            "type": "primitive",
+            "kind": "sphere",
+            "params": {
+              "r": 1
+            }
+          }
+        }
+      }
+    }
+  ],
+  "ports": [],
+  "objectives": [],
+  "constraints": [],
+  "metadata": {},
+  "history": []
+}

@@ -1,0 +1,73 @@
+{
+  "fixture": "components_union.sdm",
+  "notes": "Root union expands into two labelled components.",
+  "pending": null,
+  "roundtrip": {
+    "load_save": true,
+    "cli": true
+  },
+  "emission": {
+    "status": "ok",
+    "entry_point": "sdf_scene",
+    "lib_functions": [
+      "op_union",
+      "sdf_box",
+      "sdf_sphere",
+      "sdm_cut_plane",
+      "sdm_rest_point"
+    ],
+    "component_labels": [
+      "ball",
+      "cube"
+    ],
+    "component_machines": [
+      "sdf_n0_d3",
+      "sdf_n1_d3"
+    ],
+    "poly_max_n": 0,
+    "poly_table_len": 0,
+    "poly_tex_width": 0,
+    "control_classes": {},
+    "uniform_sources": [],
+    "scene_needles": [
+      "op_union",
+      "sdf_sphere",
+      "sdf_box",
+      "sdf_scene_comp"
+    ],
+    "macros_forbidden": [
+      "SDM_POLY_TABLE"
+    ]
+  },
+  "numerical": {
+    "points": [
+      [
+        0.0,
+        0.0,
+        0.0
+      ],
+      [
+        8.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        8.0,
+        0.0
+      ],
+      [
+        4.0,
+        4.0,
+        4.0
+      ]
+    ],
+    "jax_values": [
+      -5.0,
+      3.0,
+      3.0,
+      1.73205078
+    ],
+    "jax_atol": 1e-05
+  }
+}

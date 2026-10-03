@@ -1,0 +1,39 @@
+{
+  "schema_version": "0.2",
+  "name": "conformance_invalid_expr_unknown_node_type",
+  "params": {
+    "radius": {
+      "name": "radius",
+      "value": 5.0,
+      "free": true,
+      "bounds": [
+        1.0,
+        10.0
+      ],
+      "unit": "mm"
+    }
+  },
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "PLA",
+      "sdf_tree": {
+        "type": "primitive",
+        "kind": "sphere",
+        "params": {
+          "r": {
+            "type": "binp",
+            "op": "*",
+            "lhs": {
+              "$ref": "radius"
+            },
+            "rhs": {
+              "type": "num",
+              "value": 2.0
+            }
+          }
+        }
+      }
+    }
+  ]
+}

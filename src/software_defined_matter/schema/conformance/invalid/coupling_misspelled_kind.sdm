@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.2",
+  "name": "conformance_invalid_coupling_misspelled_kind",
+  "params": {
+    "radius": {
+      "name": "radius",
+      "value": 5.0,
+      "free": true,
+      "bounds": [
+        1.0,
+        10.0
+      ],
+      "unit": "mm"
+    }
+  },
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "PLA",
+      "sdf_tree": {
+        "type": "primitive",
+        "kind": "sphere",
+        "params": {
+          "r": {
+            "$ref": "radius"
+          }
+        }
+      }
+    }
+  ],
+  "couplings": [
+    {
+      "name": "mount_face",
+      "position": [
+        0.0,
+        0.0,
+        5.0
+      ],
+      "normal": [
+        0.0,
+        0.0,
+        1.0
+      ],
+      "sdf_tree": {
+        "type": "primitive",
+        "kind": "spere",
+        "params": {
+          "r": {
+            "$ref": "radius"
+          }
+        }
+      }
+    }
+  ]
+}

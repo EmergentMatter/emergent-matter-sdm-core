@@ -1,0 +1,155 @@
+{
+  "inline": {
+    "fixture": "inline.sdm",
+    "param": "half_width",
+    "uniform": "u_p_half_width",
+    "points": [
+      [
+        2.1,
+        0.4,
+        0.02
+      ],
+      [
+        1.8,
+        0.4,
+        0.02
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ]
+    ],
+    "live_cases": [
+      {
+        "value": 0.1,
+        "distances": [
+          0.0513621,
+          0.0460772,
+          1.8829291
+        ]
+      },
+      {
+        "value": 0.3,
+        "distances": [
+          -0.1486379,
+          -0.1493193,
+          1.682929
+        ]
+      },
+      {
+        "value": 0.6,
+        "distances": [
+          -0.1493193,
+          -0.1493193,
+          1.3829291
+        ]
+      }
+    ],
+    "sweep_max_s": 60,
+    "sweep_tex_width": 0,
+    "sweep_table_texels": 0,
+    "near_ties": {
+      "relative_squared_distance_margin": 1e-05,
+      "distance_tolerance": 1e-05,
+      "param_value": 0.3,
+      "cases": [
+        {
+          "point": [
+            0.6559749841690063,
+            2.246870517730713,
+            0.8749483227729797
+          ],
+          "segments": [
+            28,
+            29
+          ],
+          "distances": [
+            0.0449172,
+            0.0415672
+          ],
+          "inside": false
+        }
+      ]
+    }
+  },
+  "tabled": {
+    "fixture": "tabled.sdm",
+    "param": "radius",
+    "uniform": "u_p_radius",
+    "points": [
+      [
+        0.2,
+        0.0,
+        1.51
+      ],
+      [
+        4.2,
+        0.0,
+        1.51
+      ],
+      [
+        0.7,
+        0.0,
+        1.51
+      ],
+      [
+        4.7,
+        0.0,
+        1.51
+      ],
+      [
+        0.0,
+        0.0,
+        -0.5
+      ],
+      [
+        4.0,
+        0.0,
+        3.5
+      ]
+    ],
+    "live_cases": [
+      {
+        "value": 0.1,
+        "distances": [
+          0.1,
+          0.0999998,
+          0.6,
+          0.5999998,
+          0.5,
+          0.5
+        ]
+      },
+      {
+        "value": 0.3,
+        "distances": [
+          -0.1,
+          -0.1000002,
+          0.4,
+          0.3999998,
+          0.5,
+          0.5
+        ]
+      },
+      {
+        "value": 0.6,
+        "distances": [
+          -0.4,
+          -0.4000002,
+          0.1,
+          0.0999998,
+          0.5,
+          0.5
+        ]
+      }
+    ],
+    "sweep_max_s": 299,
+    "sweep_tex_width": 1024,
+    "sweep_table_texels": 2394,
+    "headers": [
+      0,
+      1197
+    ]
+  }
+}

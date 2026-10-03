@@ -1,0 +1,75 @@
+{
+  "schema_version": "0.5",
+  "kind": "assembly",
+  "name": "conformance_mates",
+  "params": {},
+  "instances": [
+    {
+      "id": "base",
+      "part_ref": {
+        "path": "minimal_0.5.sdm"
+      },
+      "param_overrides": {},
+      "dof_bindings": {},
+      "transform": {
+        "position": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    },
+    {
+      "id": "moving",
+      "part_ref": {
+        "path": "minimal_0.5.sdm"
+      },
+      "param_overrides": {},
+      "dof_bindings": {}
+    }
+  ],
+  "port": {},
+  "dofs": {
+    "turn": {
+      "kind": "angle",
+      "range": [
+        -180,
+        180
+      ],
+      "unit": "deg",
+      "default": 45
+    }
+  },
+  "motion_inputs": {},
+  "objectives": [],
+  "constraints": [],
+  "metadata": {},
+  "mates": [
+    {
+      "id": "joint",
+      "kind": "revolute",
+      "parent": "base.top",
+      "child": "moving.top",
+      "offset": {
+        "position": [
+          3,
+          1,
+          0
+        ],
+        "orientation": [
+          0.7071067811865476,
+          0.7071067811865476,
+          0,
+          0
+        ]
+      },
+      "dof": "turn"
+    }
+  ]
+}

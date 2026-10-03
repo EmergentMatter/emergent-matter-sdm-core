@@ -1,0 +1,70 @@
+{
+  "schema_version": "0.5",
+  "kind": "assembly",
+  "name": "conformance_motion",
+  "params": {
+    "ratio": {
+      "name": "ratio",
+      "value": 2,
+      "free": true,
+      "bounds": null,
+      "unit": "count"
+    }
+  },
+  "instances": [
+    {
+      "id": "mechanism",
+      "part_ref": {
+        "path": "assembly_mates_0.5.sdm"
+      },
+      "param_overrides": {},
+      "dof_bindings": {
+        "turn": {
+          "type": "binop",
+          "op": "*",
+          "lhs": {
+            "type": "dof",
+            "name": "drive"
+          },
+          "rhs": {
+            "type": "param",
+            "name": "ratio"
+          }
+        }
+      },
+      "transform": {
+        "position": [
+          10,
+          0,
+          0
+        ],
+        "orientation": [
+          1.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      }
+    }
+  ],
+  "port": {
+    "output": "mechanism.moving.top"
+  },
+  "dofs": {
+    "drive": {
+      "kind": "angle",
+      "range": [
+        -180,
+        180
+      ],
+      "unit": "deg",
+      "default": 45
+    }
+  },
+  "motion_inputs": {
+    "alias": "mechanism.turn"
+  },
+  "objectives": [],
+  "constraints": [],
+  "metadata": {}
+}

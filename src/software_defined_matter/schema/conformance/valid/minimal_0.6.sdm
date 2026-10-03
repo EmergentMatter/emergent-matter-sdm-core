@@ -1,0 +1,38 @@
+{
+  "schema_version": "0.6",
+  "kind": "part",
+  "name": "conformance_shear_linear",
+  "metadata": {},
+  "params": {},
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "solid",
+      "sdf_tree": {
+        "type": "deform",
+        "deform": "shear_linear",
+        "params": {
+          "axis": [
+            1.0,
+            0.0
+          ],
+          "u0": -1.0,
+          "u1": 1.0,
+          "dz_0": 0.0,
+          "dz_1": 1.0
+        },
+        "child": {
+          "type": "primitive",
+          "kind": "sphere",
+          "params": {
+            "r": 1.0
+          }
+        }
+      }
+    }
+  ],
+  "ports": [],
+  "objectives": [],
+  "constraints": [],
+  "history": []
+}

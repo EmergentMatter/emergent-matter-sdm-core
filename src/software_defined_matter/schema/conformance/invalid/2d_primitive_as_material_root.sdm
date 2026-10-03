@@ -1,0 +1,31 @@
+{
+  "schema_version": "0.2",
+  "name": "conformance_invalid_2d_primitive_as_material_root",
+  "params": {
+    "radius": {
+      "name": "radius",
+      "value": 5.0,
+      "free": true,
+      "bounds": [
+        1.0,
+        10.0
+      ],
+      "unit": "mm"
+    }
+  },
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "PLA",
+      "sdf_tree": {
+        "type": "primitive",
+        "kind": "circle_2d",
+        "params": {
+          "r": {
+            "$ref": "radius"
+          }
+        }
+      }
+    }
+  ]
+}

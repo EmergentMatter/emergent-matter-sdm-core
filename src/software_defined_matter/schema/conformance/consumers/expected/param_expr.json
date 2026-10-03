@@ -1,0 +1,69 @@
+{
+  "fixture": "param_expr.sdm",
+  "notes": "Derived Param.expr expands over the live base uniform in GLSL.",
+  "pending": null,
+  "roundtrip": {
+    "load_save": true,
+    "cli": true
+  },
+  "emission": {
+    "status": "ok",
+    "entry_point": "sdf_scene",
+    "lib_functions": [
+      "sdf_sphere",
+      "sdm_cut_plane",
+      "sdm_rest_point"
+    ],
+    "component_labels": [],
+    "component_machines": [],
+    "poly_max_n": 0,
+    "poly_table_len": 0,
+    "poly_tex_width": 0,
+    "control_classes": {
+      "live": [
+        "radius"
+      ],
+      "derived": [
+        "diameter"
+      ]
+    },
+    "uniform_sources": [
+      "radius"
+    ],
+    "scene_needles": [
+      "(2.0 * u_p_radius)",
+      "sdf_sphere"
+    ],
+    "macros_forbidden": [
+      "SDM_POLY_TABLE"
+    ]
+  },
+  "numerical": {
+    "points": [
+      [
+        10.0,
+        0.0,
+        0.0
+      ],
+      [
+        5.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.0
+      ]
+    ],
+    "free_vec": [
+      5.0
+    ],
+    "jax_values": [
+      0.0,
+      -5.0,
+      -10.0
+    ],
+    "jax_atol": 1e-05
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "entry_point": "sdf_scene",
+  "smooth_csg": false,
+  "smooth_k": 0.25,
+  "bbox": [
+    [
+      -40.35,
+      -40.35,
+      -30.0
+    ],
+    [
+      40.35,
+      40.35,
+      34.0
+    ]
+  ],
+  "uniforms": [
+    {
+      "name": "u_p_notch_radius",
+      "glsl_type": "float",
+      "initial": 3.0,
+      "bounds": [
+        1.0,
+        6.0
+      ],
+      "unit": "mm",
+      "source_param": "notch_radius"
+    },
+    {
+      "name": "u_p_outer_radius",
+      "glsl_type": "float",
+      "initial": 20.0,
+      "bounds": [
+        10.0,
+        40.0
+      ],
+      "unit": "mm",
+      "source_param": "outer_radius"
+    },
+    {
+      "name": "u_p_height",
+      "glsl_type": "float",
+      "initial": 30.0,
+      "bounds": null,
+      "unit": "mm",
+      "source_param": "height"
+    },
+    {
+      "name": "u_p_inner_radius",
+      "glsl_type": "float",
+      "initial": 14.0,
+      "bounds": [
+        6.0,
+        30.0
+      ],
+      "unit": "mm",
+      "source_param": "inner_radius"
+    }
+  ]
+}
