@@ -550,9 +550,8 @@ def test_sdf_node_versions_match_their_schema_introduction():
     ]
     for registry in registries:
         for spec in registry.values():
-            expected = (
-                "0.6" if spec.name in {"shear_linear", "taper_linear", "scale_axis"} else "0.1"
-            )
+            added_in_0_6 = {"shear_linear", "taper_linear", "scale_axis"}
+            expected = "0.6" if spec.name in added_in_0_6 else "0.1"
             assert spec.since == expected, (
                 f"{spec.name}: expected since={expected!r}, got {spec.since!r}"
             )
@@ -564,6 +563,9 @@ def test_sdf_node_versions_match_their_schema_introduction():
         assert singleton.since == "0.1"
         for p in singleton.params:
             assert p.since == "0.1"
+    assert wire.VSWEEP.since == "0.6"
+    for p in wire.VSWEEP.params:
+        assert p.since == "0.6"
 
 
 # ---------------------------------------------------------------------------

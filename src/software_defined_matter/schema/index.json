@@ -185,7 +185,8 @@
       "added": [
         "scale_axis",
         "shear_linear",
-        "taper_linear"
+        "taper_linear",
+        "vsweep"
       ]
     }
   }
