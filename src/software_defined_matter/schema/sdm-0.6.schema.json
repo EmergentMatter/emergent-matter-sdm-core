@@ -851,16 +851,45 @@
               "additionalProperties": false,
               "properties": {
                 "path": {
-                  "type": "array",
-                  "items": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      "minItems": 2
                     },
-                    "minItems": 3,
-                    "maxItems": 3
-                  },
-                  "minItems": 2
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "$along"
+                      ],
+                      "properties": {
+                        "$along": {
+                          "type": "array",
+                          "minItems": 2,
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            "minItems": 2
+                          }
+                        }
+                      }
+                    }
+                  ]
                 },
                 "path_kind": {
                   "enum": [
@@ -879,12 +908,37 @@
                   ]
                 },
                 "normal0": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/scalarValue"
-                  },
-                  "minItems": 3,
-                  "maxItems": 3
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      "minItems": 3,
+                      "maxItems": 3
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "$along"
+                      ],
+                      "properties": {
+                        "$along": {
+                          "type": "array",
+                          "minItems": 2,
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            },
+                            "minItems": 3,
+                            "maxItems": 3
+                          }
+                        }
+                      }
+                    }
+                  ]
                 }
               },
               "required": [
@@ -914,10 +968,33 @@
               "additionalProperties": false,
               "properties": {
                 "z": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/$defs/scalarValue"
-                  }
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/scalarValue"
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "$along"
+                      ],
+                      "properties": {
+                        "$along": {
+                          "type": "array",
+                          "minItems": 2,
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
                 },
                 "smooth": {
                   "type": "boolean"
@@ -936,6 +1013,184 @@
           },
           "required": [
             "children",
+            "params"
+          ]
+        },
+        {
+          "properties": {
+            "type": {
+              "const": "vsweep"
+            },
+            "child": {
+              "$ref": "#/$defs/sdf"
+            },
+            "params": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      "minItems": 2
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "$along"
+                      ],
+                      "properties": {
+                        "$along": {
+                          "type": "array",
+                          "minItems": 2,
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            "minItems": 2
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "up": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      "minItems": 2
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "$along"
+                      ],
+                      "properties": {
+                        "$along": {
+                          "type": "array",
+                          "minItems": 2,
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            "minItems": 2
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "twist": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/scalarValue"
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "$along"
+                      ],
+                      "properties": {
+                        "$along": {
+                          "type": "array",
+                          "minItems": 2,
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "mitre": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      "minItems": 2
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "$along"
+                      ],
+                      "properties": {
+                        "$along": {
+                          "type": "array",
+                          "minItems": 2,
+                          "items": {
+                            "type": "array",
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            },
+                            "minItems": 2
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "closed": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "path"
+              ]
+            }
+          },
+          "required": [
+            "child",
             "params"
           ]
         }
@@ -1156,16 +1411,96 @@
                 "additionalProperties": false,
                 "properties": {
                   "inner_r": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "outer_r": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "half_angle": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "height": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1200,16 +1535,96 @@
                 "additionalProperties": false,
                 "properties": {
                   "outer_r": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "inner_r": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "period": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "n_periods": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1244,16 +1659,45 @@
                 "additionalProperties": false,
                 "properties": {
                   "control_points": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/scalarValue"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "minItems": 6
                       },
-                      "minItems": 2,
-                      "maxItems": 2
-                    },
-                    "minItems": 6
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/$defs/scalarValue"
+                                },
+                                "minItems": 2,
+                                "maxItems": 2
+                              },
+                              "minItems": 6
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1285,12 +1729,37 @@
                 "additionalProperties": false,
                 "properties": {
                   "b": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1322,12 +1791,37 @@
                 "additionalProperties": false,
                 "properties": {
                   "b": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1359,15 +1853,60 @@
                 "additionalProperties": false,
                 "properties": {
                   "b": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "e": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1400,16 +1939,45 @@
                 "additionalProperties": false,
                 "properties": {
                   "control_points": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/scalarValue"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "minItems": 4
                       },
-                      "minItems": 2,
-                      "maxItems": 2
-                    },
-                    "minItems": 4
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/$defs/scalarValue"
+                                },
+                                "minItems": 2,
+                                "maxItems": 2
+                              },
+                              "minItems": 4
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1441,13 +2009,73 @@
                 "additionalProperties": false,
                 "properties": {
                   "h": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "r1": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "r2": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1481,10 +2109,50 @@
                 "additionalProperties": false,
                 "properties": {
                   "h": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "r": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1517,18 +2185,83 @@
                 "additionalProperties": false,
                 "properties": {
                   "sc": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "ra": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "rb": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1562,23 +2295,93 @@
                 "additionalProperties": false,
                 "properties": {
                   "a": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "b": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "r": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1612,7 +2415,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "r": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1644,15 +2467,60 @@
                 "additionalProperties": false,
                 "properties": {
                   "c": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "h": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1685,10 +2553,50 @@
                 "additionalProperties": false,
                 "properties": {
                   "r": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "h": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1721,12 +2629,37 @@
                 "additionalProperties": false,
                 "properties": {
                   "r": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1758,18 +2691,83 @@
                 "additionalProperties": false,
                 "properties": {
                   "period": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "min_thickness": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "n_periods": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1803,22 +2801,142 @@
                 "additionalProperties": false,
                 "properties": {
                   "major_r": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "pitch": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "r": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "n_turns": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "phase": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "handedness": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1853,12 +2971,37 @@
                 "additionalProperties": false,
                 "properties": {
                   "h": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1890,13 +3033,73 @@
                 "additionalProperties": false,
                 "properties": {
                   "length": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "width": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "thickness": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1930,18 +3133,83 @@
                 "additionalProperties": false,
                 "properties": {
                   "period": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "min_thickness": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "n_periods": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -1975,13 +3243,73 @@
                 "additionalProperties": false,
                 "properties": {
                   "le": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "r1": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "r2": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2015,18 +3343,83 @@
                 "additionalProperties": false,
                 "properties": {
                   "period": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "min_thickness": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "n_periods": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2060,13 +3453,73 @@
                 "additionalProperties": false,
                 "properties": {
                   "width": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "depth": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "notch_radius": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2100,7 +3553,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "s": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2132,15 +3605,60 @@
                 "additionalProperties": false,
                 "properties": {
                   "n": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "h": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2173,16 +3691,45 @@
                 "additionalProperties": false,
                 "properties": {
                   "vertices": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/scalarValue"
+                          },
+                          "minItems": 2,
+                          "maxItems": 2
+                        },
+                        "minItems": 3
                       },
-                      "minItems": 2,
-                      "maxItems": 2
-                    },
-                    "minItems": 3
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/$defs/scalarValue"
+                                },
+                                "minItems": 2,
+                                "maxItems": 2
+                              },
+                              "minItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2214,7 +3761,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "h": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2246,28 +3813,103 @@
                 "additionalProperties": false,
                 "properties": {
                   "origin": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "spacing": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "dims": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "encoding": {
                     "enum": [
@@ -2280,7 +3922,27 @@
                     "minLength": 1
                   },
                   "step_scale": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "provenance": {
                     "type": "object"
@@ -2319,15 +3981,60 @@
                 "additionalProperties": false,
                 "properties": {
                   "b": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "r": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2360,15 +4067,60 @@
                 "additionalProperties": false,
                 "properties": {
                   "b": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "r": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2401,13 +4153,73 @@
                 "additionalProperties": false,
                 "properties": {
                   "ra": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "rb": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "h": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2441,18 +4253,83 @@
                 "additionalProperties": false,
                 "properties": {
                   "period": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "min_thickness": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "n_periods": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2486,18 +4363,83 @@
                 "additionalProperties": false,
                 "properties": {
                   "period": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "min_thickness": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "n_periods": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2531,28 +4473,188 @@
                 "additionalProperties": false,
                 "properties": {
                   "r_root": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "depth": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "pitch": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "width": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "n_turns": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "phase": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "handedness": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "flank_deg": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2588,20 +4690,70 @@
                 "additionalProperties": false,
                 "properties": {
                   "a": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "b": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2634,19 +4786,119 @@
                 "additionalProperties": false,
                 "properties": {
                   "amplitude": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "wavelength": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "beam_width": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "beam_height": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "n_periods": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2682,15 +4934,60 @@
                 "additionalProperties": false,
                 "properties": {
                   "c": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "ra": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2723,7 +5020,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "r": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2755,12 +5072,37 @@
                 "additionalProperties": false,
                 "properties": {
                   "t": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2792,13 +5134,73 @@
                 "additionalProperties": false,
                 "properties": {
                   "r1": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "r2": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "he": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2832,12 +5234,37 @@
                 "additionalProperties": false,
                 "properties": {
                   "h": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2869,13 +5296,73 @@
                 "additionalProperties": false,
                 "properties": {
                   "r1": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "r2": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "h": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2934,7 +5421,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "k": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2966,7 +5473,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "k": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2998,7 +5525,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "k": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3030,10 +5577,50 @@
                 "additionalProperties": false,
                 "properties": {
                   "k": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "chunk_size": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3065,7 +5652,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "k": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3147,13 +5754,53 @@
                 "additionalProperties": false,
                 "properties": {
                   "n_sectors": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "centered": {
                     "type": "boolean"
                   },
                   "phase_frac": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3185,20 +5832,70 @@
                 "additionalProperties": false,
                 "properties": {
                   "n": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "o": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3231,15 +5928,60 @@
                 "additionalProperties": false,
                 "properties": {
                   "c": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "l": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3272,12 +6014,37 @@
                 "additionalProperties": false,
                 "properties": {
                   "c": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3309,17 +6076,47 @@
                 "additionalProperties": false,
                 "properties": {
                   "R": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/scalarValue"
+                          },
+                          "minItems": 3,
+                          "maxItems": 3
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
                       },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "array",
+                                "items": {
+                                  "$ref": "#/$defs/scalarValue"
+                                },
+                                "minItems": 3,
+                                "maxItems": 3
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3351,7 +6148,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "angle": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3383,7 +6200,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "angle": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3415,7 +6252,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "angle": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3447,7 +6304,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "s": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3479,12 +6356,37 @@
                 "additionalProperties": false,
                 "properties": {
                   "s": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3516,12 +6418,37 @@
                 "additionalProperties": false,
                 "properties": {
                   "t": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3553,12 +6480,37 @@
                 "additionalProperties": false,
                 "properties": {
                   "h": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3590,7 +6542,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "thickness": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3622,7 +6594,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "r": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3654,7 +6646,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "k": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3714,24 +6726,129 @@
                 "additionalProperties": false,
                 "properties": {
                   "axis": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "u0": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "u1": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "dz_0": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "dz_1": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3766,16 +6883,96 @@
                 "additionalProperties": false,
                 "properties": {
                   "z0": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "z1": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "s_0": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "s_1": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3810,7 +7007,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "k": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3842,24 +7059,129 @@
                 "additionalProperties": false,
                 "properties": {
                   "axis": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 2,
-                    "maxItems": 2
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 2,
+                              "maxItems": 2
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "u0": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "u1": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "angle_0": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "angle_1": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3894,16 +7216,96 @@
                 "additionalProperties": false,
                 "properties": {
                   "r0": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "r1": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "angle_inner": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "angle_outer": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3938,7 +7340,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "h": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -3970,7 +7392,27 @@
                 "additionalProperties": false,
                 "properties": {
                   "offset": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 }
               }
@@ -4102,13 +7544,73 @@
                 "additionalProperties": false,
                 "properties": {
                   "freq": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "amplitude": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "phase": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -4140,13 +7642,73 @@
                 "additionalProperties": false,
                 "properties": {
                   "freq": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "amplitude": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "phase": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -4178,23 +7740,93 @@
                 "additionalProperties": false,
                 "properties": {
                   "freq": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "amplitude": {
-                    "$ref": "#/$defs/scalarValue"
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/scalarValue"
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "$ref": "#/$defs/scalarValue"
+                            }
+                          }
+                        }
+                      }
+                    ]
                   },
                   "phase": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    "oneOf": [
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "$along"
+                        ],
+                        "properties": {
+                          "$along": {
+                            "type": "array",
+                            "minItems": 2,
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "$ref": "#/$defs/scalarValue"
+                              },
+                              "minItems": 3,
+                              "maxItems": 3
+                            }
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [

@@ -268,6 +268,16 @@ def _compile_node(
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
+    if kind == "vsweep":
+        from software_defined_matter.sdf.sdf_vsweep import compile_vsweep
+
+        return compile_vsweep(
+            node,
+            binding,
+            lambda tree, b: _compile_node(
+                tree, b, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k
+            ),
+        )
     raise ValueError(f"Unknown SDF node type {kind!r}")
 
 

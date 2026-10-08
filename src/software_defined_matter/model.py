@@ -1276,6 +1276,43 @@ def sdf_sweep(
     return {"type": "sweep", "child": profile_2d, "params": params}
 
 
+def sdf_vsweep(
+    profile_2d: SDFTree,
+    path: Any,
+    up: Any = None,
+    twist: Any = None,
+    mitre: Any = None,
+    closed: bool = False,
+) -> SDFTree:
+    """Create a 3-D ``vsweep`` node: ANY 2-D profile swept along a polyline
+    ``path`` (a list of ``[x, y, z]`` vertices), its parameters free to vary
+    along the length and the section free to twist, corners mitred.
+
+    Inside ``profile_2d`` any parameter value may be ``{"$along": [v_0, ...,
+    v_(K-1)]}``, one value per path vertex in the parameter's own shape,
+    interpolated linearly along each segment: a rounded box's half-sizes can
+    taper while its corner radius grows, a circle can swell. ``twist`` is an
+    optional angle per vertex (radians) turning the section about the path.
+    ``up`` (per vertex, default +Z) fixes the profile's second axis with its
+    along-path part removed; ``mitre`` gives a vertex an explicit cut-plane
+    normal (zero rows use the bisector). ``closed`` joins the last vertex to
+    the first. Two coincident consecutive vertices change the section abruptly
+    at a corner. The web viewer has no GLSL for this node yet; bake it for
+    viewing.
+    """
+    params: dict[str, Any] = {
+        "path": ([list(pt) for pt in path] if isinstance(path, (list, tuple)) else path),
+        "closed": bool(closed),
+    }
+    if up is not None:
+        params["up"] = [list(v) for v in up] if isinstance(up, (list, tuple)) else up
+    if twist is not None:
+        params["twist"] = list(twist) if isinstance(twist, (list, tuple)) else twist
+    if mitre is not None:
+        params["mitre"] = [list(v) for v in mitre] if isinstance(mitre, (list, tuple)) else mitre
+    return {"type": "vsweep", "child": profile_2d, "params": params}
+
+
 def sdf_loft(
     profiles_2d: list[SDFTree],
     z: list[Number],

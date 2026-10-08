@@ -103,6 +103,7 @@ SDFNodeType = Literal[
     "2d_to_3d",
     "sweep",
     "loft",
+    "vsweep",
 ]
 SDF_NODE_TYPES: tuple[SDFNodeType, ...] = get_args(SDFNodeType)
 
@@ -757,6 +758,24 @@ SWEEP = NodeSpec(
     ),
 )
 
+#: ANY 2-D profile swept along a 3-D polyline with its parameters free to
+#: vary along the length (``{"$along": [...]}`` leaves inside the child, one
+#: value per path vertex), an optional twist per vertex, and mitred corners.
+#: ``closed`` is structural like ``sweep``'s.
+VSWEEP = NodeSpec(
+    "vsweep",
+    "sweep",
+    since="0.6",
+    dim=3,
+    params=(
+        ParamSpec("path", True, "point_list", point_dim=3, min_points=2, since="0.6"),
+        ParamSpec("up", False, "point_list", point_dim=3, min_points=2, since="0.6"),
+        ParamSpec("twist", False, "scalar_list", since="0.6"),
+        ParamSpec("mitre", False, "point_list", point_dim=3, min_points=2, since="0.6"),
+        ParamSpec("closed", False, "bool", ref_ok=False, since="0.6"),
+    ),
+)
+
 #: N 2-D cross-section profiles lofted along Z. ``smooth`` / ``interp`` are
 #: structural flags for the same reason as ``sweep``'s ``path_kind`` above.
 LOFT = NodeSpec(
@@ -1017,6 +1036,7 @@ __all__ = [
     "SDF_NODE_TYPES",
     "SUBTRACT_OPS",
     "SWEEP",
+    "VSWEEP",
     "TILING_TRANSFORMS",
     "TRANSFORMS",
     "TWO_D_TO_3D",

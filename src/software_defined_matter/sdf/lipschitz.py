@@ -146,7 +146,8 @@ def _node_rate(node: Any, intervals: dict[str, Interval], domain: BBox | None) -
 
     # `loft` interpolates two 2-D fields along Z; the interpolation introduces
     # a Z-derivative that depends on how different the sections are, and no
-    # bound has been worked out.
+    # bound has been worked out. `vsweep` is the same story along its path
+    # (its `$along` parameters and twist add a slope no bound covers yet).
     return UNKNOWN
 
 

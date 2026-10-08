@@ -198,7 +198,7 @@ def _node_features(node: Any, intervals: dict[str, Interval]) -> list[float | No
             out.extend(_node_features(child, intervals))
         return out
 
-    if node_type in ("transform", "deform", "2d_to_3d", "sweep"):
+    if node_type in ("transform", "deform", "2d_to_3d", "sweep", "vsweep"):
         # A rigid motion or a lift does not change how thick a wall is. `scale`
         # does, and is handled by scaling the child's features.
         child = _node_features(node.get("child"), intervals)

@@ -95,7 +95,7 @@ _TILING_TRANSFORMS = wire.TILING_TRANSFORMS
 #: Node kinds that wrap exactly one child under the ``child`` key and pass the
 #: envelope through unchanged. ``deform``'s ``field`` slot is a displacement
 #: field, not an SDF subtree, so it is carried over untouched.
-_PASSTHROUGH_TYPES = frozenset({"deform", "2d_to_3d", "sweep"})
+_PASSTHROUGH_TYPES = frozenset({"deform", "2d_to_3d", "sweep", "vsweep"})
 
 #: Node kinds that hold several children under ``children`` and are not CSG
 #: ops. ``loft`` interpolates N 2-D profiles along Z.

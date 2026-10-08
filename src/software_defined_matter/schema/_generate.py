@@ -53,7 +53,23 @@ _GENERATED_VERSION = wire.SCHEMA_VERSIONS[-1]
 
 
 def _value_schema(pspec: wire.ParamSpec) -> dict[str, Any]:
-    """The JSON Schema for one SDF/field node kwarg's value."""
+    """The JSON Schema for one SDF/field node kwarg's value. Number-shaped
+    values may also be an ``{"$along": [...]}`` leaf, one value per path
+    vertex (meaningful only inside a ``vsweep`` profile; the semantic
+    validator enforces where)."""
+    base = _plain_value_schema(pspec)
+    if pspec.wire_shape in ("string", "bool", "object"):
+        return base
+    along = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["$along"],
+        "properties": {"$along": {"type": "array", "minItems": 2, "items": base}},
+    }
+    return {"oneOf": [base, along]}
+
+
+def _plain_value_schema(pspec: wire.ParamSpec) -> dict[str, Any]:
     shape = pspec.wire_shape
     if shape == "scalar":
         return {"$ref": "#/$defs/scalarValue"}
@@ -242,6 +258,14 @@ def _sdf_def() -> dict[str, Any]:
                 "params": _params_schema(wire.LOFT),
             },
             "required": ["children", "params"],
+        },
+        {
+            "properties": {
+                "type": {"const": "vsweep"},
+                "child": {"$ref": "#/$defs/sdf"},
+                "params": _params_schema(wire.VSWEEP),
+            },
+            "required": ["child", "params"],
         },
     ]
     all_of = (
@@ -948,7 +972,7 @@ def _added_since(version: wire.SchemaVersion) -> list[str]:
     for registry in registries:
         for name, spec in registry.items():
             added.extend(_node_additions(name, spec, version))
-    for spec in (wire.SWEEP, wire.LOFT):
+    for spec in (wire.SWEEP, wire.LOFT, wire.VSWEEP):
         added.extend(_node_additions(spec.name, spec, version))
     for dataclass_name, field_specs in wire.DOCUMENT_FIELDS.items():
         for fspec in field_specs:
