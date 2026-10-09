@@ -79,3 +79,16 @@ def test_a_step_must_install_something_and_point_somewhere():
         AssemblyStep("x", "Nothing", ())
     with pytest.raises(ValueError):
         AssemblyStep("x", "Zero", ("lid",), direction=(0, 0, 0))
+
+
+def test_with_process_lists_instances_in_build_order():
+    shuffled = Assembly(
+        "box",
+        instances=(
+            Instance("screw", PartRef("screw.sdm")),
+            Instance("frame", PartRef("frame.sdm")),
+            Instance("lid", PartRef("lid.sdm")),
+        ),
+    )
+    built = with_process(shuffled, PROCESS)
+    assert [i.id for i in built.instances] == PROCESS.build_order() == ["frame", "lid", "screw"]

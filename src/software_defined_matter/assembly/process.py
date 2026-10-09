@@ -14,6 +14,12 @@ it back; :meth:`AssemblyProcess.problems` checks it against the assembly.
 A part can be installed many ways in many contexts. Only the assembly that
 places it knows which way applies, which is why the sequence belongs to the
 assembly and not to the part.
+
+Assemblies are meant to be structured the way the thing is built: parts
+grouped into sub-assemblies by build station (put together off the line and
+installed as a unit), and every assembly's instances listed in build order,
+so reading the tree walks through the build. :func:`with_process` does the
+listing.
 """
 
 from __future__ import annotations
@@ -202,6 +208,10 @@ class AssemblyProcess:
         out += [f"{i!r} is never installed and is not in base" for i in known if i not in placed]
         return out
 
+    def build_order(self) -> list[str]:
+        """Instance ids in the order they are built: ``base``, then step by step."""
+        return list(self.base) + [i for step in self.steps for i in step.instances]
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "version": self.version,
@@ -222,18 +232,31 @@ class AssemblyProcess:
         )
 
 
-def with_process(assembly: Assembly, process: AssemblyProcess, *, b_check: bool = True) -> Assembly:
+def with_process(
+    assembly: Assembly, process: AssemblyProcess, *, b_check: bool = True, b_reorder: bool = True
+) -> Assembly:
     """A copy of ``assembly`` carrying ``process`` in its metadata.
 
     Refuses a sequence with problems unless ``b_check`` is False: a wrong
     build sequence does not crash anything, it misleads the person building.
+
+    With ``b_reorder`` (the default) the instances are also listed in build
+    order (``base`` first, then step by step), so the assembly tree reads as
+    the build: a person scrolling the tree and a viewer playing the steps see
+    the same sequence.
     """
     if b_check:
         found = process.problems(assembly)
         if found:
             raise ValueError(f"Assembly {assembly.name!r} build sequence: " + "; ".join(found))
+    instances = assembly.instances
+    if b_reorder:
+        rank = {iid: k for k, iid in enumerate(process.build_order())}
+        instances = tuple(sorted(instances, key=lambda i: rank.get(i.id, len(rank))))
     return dataclasses.replace(
-        assembly, metadata={**assembly.metadata, METADATA_KEY: process.to_dict()}
+        assembly,
+        instances=instances,
+        metadata={**assembly.metadata, METADATA_KEY: process.to_dict()},
     )
 
 
