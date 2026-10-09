@@ -15,6 +15,13 @@ from software_defined_matter.assembly.placement import (
     PlacementState,
     compile_placement,
 )
+from software_defined_matter.assembly.process import (
+    AssemblyProcess,
+    AssemblyStep,
+    Twist,
+    process_of,
+    with_process,
+)
 
 __all__ = [
     "PlacementEval",
@@ -23,6 +30,11 @@ __all__ = [
     "compile_placement",
     "Assembly",
     "AssemblyBundle",
+    "AssemblyProcess",
+    "AssemblyStep",
+    "Twist",
+    "process_of",
+    "with_process",
     "Dof",
     "Instance",
     "Mate",
