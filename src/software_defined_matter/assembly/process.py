@@ -97,9 +97,20 @@ class AssemblyStep:
     tool: str | None = None
     fasteners: tuple[str, ...] = ()
     notes: str | None = None
+    after: tuple[str, ...] | None = None
+    """Steps that must be finished first; None means the step before."""
+    minutes: float | None = None
 
     def __post_init__(self) -> None:
         validate_identifier(self.id, "AssemblyStep.id")
+        if self.after is not None:
+            object.__setattr__(self, "after", tuple(self.after))
+            for a in self.after:
+                validate_identifier(a, f"AssemblyStep {self.id!r}.after")
+        if self.minutes is not None and not (
+            isinstance(self.minutes, (int, float)) and self.minutes > 0
+        ):
+            raise ValueError(f"AssemblyStep {self.id!r}.minutes: expected a positive number")
         if not isinstance(self.name, str) or not self.name:
             raise ValueError(f"AssemblyStep {self.id!r}.name: expected a nonempty description")
         object.__setattr__(self, "instances", tuple(self.instances))
@@ -134,6 +145,10 @@ class AssemblyStep:
                 out[key] = getattr(self, key)
         if self.fasteners:
             out["fasteners"] = list(self.fasteners)
+        if self.after is not None:
+            out["after"] = list(self.after)
+        if self.minutes is not None:
+            out["minutes"] = float(self.minutes)
         return out
 
     @classmethod
@@ -148,6 +163,8 @@ class AssemblyStep:
             "tool",
             "fasteners",
             "notes",
+            "after",
+            "minutes",
         }
         if unknown:
             raise ValueError(f"AssemblyStep: unknown keys {sorted(unknown)}")
@@ -161,6 +178,8 @@ class AssemblyStep:
             data.get("tool"),
             tuple(data.get("fasteners") or ()),
             data.get("notes"),
+            tuple(data["after"]) if data.get("after") is not None else None,
+            data.get("minutes"),
         )
 
 
@@ -171,6 +190,8 @@ class AssemblyProcess:
     steps: tuple[AssemblyStep, ...]
     base: tuple[str, ...] = ()
     version: int = _VERSION
+    minutes_source: str | None = None
+    """"estimate" or "measured": what the steps' minutes are."""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "steps", tuple(self.steps))
@@ -180,6 +201,14 @@ class AssemblyProcess:
             raise ValueError("AssemblyProcess.steps: step ids must be unique")
         for b in self.base:
             validate_identifier(b, "AssemblyProcess.base")
+        if self.minutes_source not in (None, "estimate", "measured"):
+            raise ValueError('AssemblyProcess.minutes_source: expected "estimate" or "measured"')
+        for k, step in enumerate(self.steps):
+            late = set(step.after or ()) - set(ids[:k])
+            if late:
+                raise ValueError(
+                    f"AssemblyStep {step.id!r}.after: {sorted(late)} are not earlier steps"
+                )
 
     def problems(self, assembly: Assembly) -> list[str]:
         """What does not add up against ``assembly``; empty when it is complete.
@@ -212,12 +241,26 @@ class AssemblyProcess:
         """Instance ids in the order they are built: ``base``, then step by step."""
         return list(self.base) + [i for step in self.steps for i in step.instances]
 
+    def needs(self) -> dict[str, tuple[str, ...]]:
+        """Each step's id -> the steps it waits for (``after``, else the step before)."""
+        out: dict[str, tuple[str, ...]] = {}
+        for k, step in enumerate(self.steps):
+            out[step.id] = (
+                step.after
+                if step.after is not None
+                else tuple(s.id for s in self.steps[max(0, k - 1) : k])
+            )
+        return out
+
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "version": self.version,
             "base": list(self.base),
             "steps": [s.to_dict() for s in self.steps],
         }
+        if self.minutes_source is not None:
+            out["minutes_source"] = self.minutes_source
+        return out
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> AssemblyProcess:
@@ -229,6 +272,7 @@ class AssemblyProcess:
         return cls(
             tuple(AssemblyStep.from_dict(s) for s in data.get("steps") or ()),
             tuple(data.get("base") or ()),
+            minutes_source=data.get("minutes_source"),
         )
 
 

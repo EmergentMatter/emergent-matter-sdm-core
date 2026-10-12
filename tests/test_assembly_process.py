@@ -92,3 +92,48 @@ def test_with_process_lists_instances_in_build_order():
     )
     built = with_process(shuffled, PROCESS)
     assert [i.id for i in built.instances] == PROCESS.build_order() == ["frame", "lid", "screw"]
+
+
+def test_dependencies_and_times_round_trip(tmp_path):
+    proc = AssemblyProcess(
+        base=("frame",),
+        steps=(
+            AssemblyStep(
+                "lid", "Fit the lid", ("lid",), direction=(0, 0, -1), after=(), minutes=1.5
+            ),
+            AssemblyStep(
+                "screw",
+                "Screw it down",
+                ("screw",),
+                direction=(0, 0, -1),
+                after=("lid",),
+                minutes=2,
+            ),
+        ),
+        minutes_source="estimate",
+    )
+    path = tmp_path / "box.sdm"
+    save(with_process(_assembly(), proc), path)
+    back = process_of(load(path, b_validate_schema=False))
+    assert back == proc
+    assert back.needs() == {"lid": (), "screw": ("lid",)}
+
+
+def test_after_left_out_means_the_step_before():
+    assert PROCESS.needs() == {"lid": (), "screw": ("lid",)}
+
+
+def test_after_names_only_earlier_steps():
+    with pytest.raises(ValueError, match="not earlier steps"):
+        AssemblyProcess(
+            steps=(
+                AssemblyStep(
+                    "lid", "Fit the lid", ("lid",), direction=(0, 0, -1), after=("screw",)
+                ),
+                AssemblyStep("screw", "Screw it down", ("screw",), direction=(0, 0, -1)),
+            )
+        )
+    with pytest.raises(ValueError, match="minutes"):
+        AssemblyStep("lid", "Fit the lid", ("lid",), direction=(0, 0, -1), minutes=0)
+    with pytest.raises(ValueError, match="minutes_source"):
+        AssemblyProcess(steps=PROCESS.steps, minutes_source="a hunch")
