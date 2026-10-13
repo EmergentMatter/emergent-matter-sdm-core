@@ -32,6 +32,7 @@ def naming_problems(assembly: Assembly, part_stems: Mapping[str, str]) -> list[s
         kind = stem.split("_")[0]
         if inst.id != kind and not inst.id.startswith(kind + "_"):
             out.append(
-                f"{inst.id!r} places {stem!r}: name it {kind}_... (what it is first, then the detail)"
+                f"{inst.id!r} places {stem!r}: name it {kind}_... "
+                "(what it is first, then the detail)"
             )
     return out
