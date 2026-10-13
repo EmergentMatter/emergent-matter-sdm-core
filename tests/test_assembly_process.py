@@ -137,3 +137,10 @@ def test_after_names_only_earlier_steps():
         AssemblyStep("lid", "Fit the lid", ("lid",), direction=(0, 0, -1), minutes=0)
     with pytest.raises(ValueError, match="minutes_source"):
         AssemblyProcess(steps=PROCESS.steps, minutes_source="a hunch")
+
+
+def test_step_kind_round_trips_and_is_checked(tmp_path):
+    step = AssemblyStep("lid", "Fit the lid", ("lid",), direction=(0, 0, -1), kind="press")
+    assert AssemblyStep.from_dict(step.to_dict()).kind == "press"
+    with pytest.raises(ValueError, match="kind"):
+        AssemblyStep("lid", "Fit the lid", ("lid",), direction=(0, 0, -1), kind="hammer")

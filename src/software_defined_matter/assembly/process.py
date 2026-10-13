@@ -77,6 +77,10 @@ class Twist:
         return cls(tuple(data["axis"]), data["angle_deg"])
 
 
+#: What sort of work a build step is.
+STEP_KINDS = ("place", "screw", "heat_set", "press", "glue", "snap", "solder", "other")
+
+
 @dataclass(frozen=True)
 class AssemblyStep:
     """One step: install ``instances`` by moving them along ``direction``.
@@ -100,6 +104,8 @@ class AssemblyStep:
     after: tuple[str, ...] | None = None
     """Steps that must be finished first; None means the step before."""
     minutes: float | None = None
+    kind: str | None = None
+    """What sort of work: one of ``STEP_KINDS``."""
 
     def __post_init__(self) -> None:
         validate_identifier(self.id, "AssemblyStep.id")
@@ -107,6 +113,8 @@ class AssemblyStep:
             object.__setattr__(self, "after", tuple(self.after))
             for a in self.after:
                 validate_identifier(a, f"AssemblyStep {self.id!r}.after")
+        if self.kind is not None and self.kind not in STEP_KINDS:
+            raise ValueError(f"AssemblyStep {self.id!r}.kind: expected one of {STEP_KINDS}")
         if self.minutes is not None and not (
             isinstance(self.minutes, (int, float)) and self.minutes > 0
         ):
@@ -149,6 +157,8 @@ class AssemblyStep:
             out["after"] = list(self.after)
         if self.minutes is not None:
             out["minutes"] = float(self.minutes)
+        if self.kind is not None:
+            out["kind"] = self.kind
         return out
 
     @classmethod
@@ -165,6 +175,7 @@ class AssemblyStep:
             "notes",
             "after",
             "minutes",
+            "kind",
         }
         if unknown:
             raise ValueError(f"AssemblyStep: unknown keys {sorted(unknown)}")
@@ -180,6 +191,7 @@ class AssemblyStep:
             data.get("notes"),
             tuple(data["after"]) if data.get("after") is not None else None,
             data.get("minutes"),
+            data.get("kind"),
         )
 
 
