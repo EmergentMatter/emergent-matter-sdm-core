@@ -1,8 +1,9 @@
 """Human-readable names for assembly occurrences (docs/adr/0009).
 
-The full name is the instance ids from the top assembly down, upper case with
-hyphens: ``HAND-MECH-CRANK-DRIVEN-THUMB``. Each instance id names what it is,
-most general word first, so the name narrows from the assembly to the detail.
+The full name is the instance ids from the top assembly down, lower case,
+joined by underscores: ``hand_mech_crank_driven_thumb`` (Rob, 2026-10-13).
+Each instance id names what it is, most general word first, so the name
+narrows from the assembly to the detail.
 """
 
 from __future__ import annotations
@@ -13,8 +14,8 @@ from software_defined_matter.assembly.model import Assembly
 
 
 def full_name(path: Sequence[str]) -> str:
-    """``("hand", "mech", "crank_driven_thumb")`` -> ``"HAND-MECH-CRANK-DRIVEN-THUMB"``."""
-    return "-".join(part.upper().replace("_", "-") for part in path if part)
+    """``("hand", "mech", "crank_driven_thumb")`` -> ``"hand_mech_crank_driven_thumb"``."""
+    return "_".join(part.lower() for part in path if part)
 
 
 def naming_problems(assembly: Assembly, part_stems: Mapping[str, str]) -> list[str]:

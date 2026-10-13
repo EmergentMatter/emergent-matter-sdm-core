@@ -24,7 +24,8 @@ starts with the first word of that file's name (`screw_m2x6.sdm` placed as
 `screw_...`): the kind comes first, and the parts list groups by it.
 
 The full name of an occurrence is its instance ids from the top assembly down,
-written upper case with hyphens: `HAND-MECH-CRANK-DRIVEN-THUMB`.
+lower case, joined by underscores: `hand_mech_crank_driven_thumb` (Rob,
+2026-10-13; the engineering playbook's part-names convention).
 `software_defined_matter.assembly.naming.full_name` builds it and
 `naming_problems` lists instances that do not start with their part's kind.
 Nothing in the file format changes: ids stay identifiers, and the full name is
@@ -35,5 +36,5 @@ derived, so it can never disagree with the tree.
 Renaming an instance renames every full name under it; tools that keep
 references by path (saved views, markups, motions, build steps) must be
 rebuilt or carried over with it. A part placed directly in the top assembly
-has a two-level name (`HAND-SCREW-M2X6-CLAMPRING-1`); that is the tree's
+has a two-level name (`hand_screw_m2x6_clampring_1`); that is the tree's
 shape, not a fault of the name.

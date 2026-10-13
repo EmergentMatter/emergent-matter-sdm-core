@@ -7,7 +7,7 @@ from software_defined_matter.assembly import full_name, naming_problems
 
 
 def test_full_name_reads_top_down():
-    assert full_name(("hand", "mech", "crank_driven_thumb")) == "HAND-MECH-CRANK-DRIVEN-THUMB"
+    assert full_name(("hand", "mech", "crank_driven_thumb")) == "hand_mech_crank_driven_thumb"
 
 
 def test_instances_start_with_their_parts_kind():
