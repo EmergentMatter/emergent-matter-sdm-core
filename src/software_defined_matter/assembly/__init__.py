@@ -9,20 +9,35 @@ from software_defined_matter.assembly.bundle import (
     load_bundle,
 )
 from software_defined_matter.assembly.model import Assembly, Dof, Instance, Mate, PartRef
+from software_defined_matter.assembly.naming import full_name, naming_problems
 from software_defined_matter.assembly.placement import (
     PlacementError,
     PlacementEval,
     PlacementState,
     compile_placement,
 )
+from software_defined_matter.assembly.process import (
+    AssemblyProcess,
+    AssemblyStep,
+    Twist,
+    process_of,
+    with_process,
+)
 
 __all__ = [
+    "full_name",
+    "naming_problems",
     "PlacementEval",
     "PlacementState",
     "PlacementError",
     "compile_placement",
     "Assembly",
     "AssemblyBundle",
+    "AssemblyProcess",
+    "AssemblyStep",
+    "Twist",
+    "process_of",
+    "with_process",
     "Dof",
     "Instance",
     "Mate",

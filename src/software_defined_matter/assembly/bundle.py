@@ -83,6 +83,36 @@ class AssemblyBundle:
         self._bindings: dict[str, Any] | None = None
         self._validate()
 
+    def uses(self) -> dict[Path, list[str]]:
+        """Every definition file below the root and the occurrences that use it.
+
+        One file is one physical part (or sub-assembly), however many places
+        it is used: change the file and every occurrence changes with it. This
+        is the count a parts list orders. An occurrence with
+        ``param_overrides`` is still listed under its file, though it is a
+        variant of that part, not another copy of it.
+        """
+        out: dict[Path, list[str]] = {}
+        for scope, source in self.sources.items():
+            if scope:
+                out.setdefault(source, []).append(scope)
+        return out
+
+    def copies(self) -> list[list[Path]]:
+        """Groups of different files that define the same thing.
+
+        The same part saved twice under two names: identical apart from the
+        name and ``metadata``. Nothing ties the copies together, so a change
+        made to one silently misses the others, and parts ordered from one
+        file may not fit where the other is used. Reuse one file instead.
+        """
+        groups: dict[str, list[Path]] = {}
+        for source, scopes in self.uses().items():
+            definition = self.definitions[scopes[0]].to_dict()
+            body = {k: v for k, v in definition.items() if k not in ("name", "metadata")}
+            groups.setdefault(json.dumps(body, sort_keys=True), []).append(source)
+        return [g for g in groups.values() if len(g) > 1]
+
     def _child(self, scope: str, name: str) -> str:
         address = f"{scope}.{name}" if scope else name
         if address not in self.definitions:
