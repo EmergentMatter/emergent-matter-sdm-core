@@ -9,6 +9,7 @@ from software_defined_matter.assembly.bundle import (
     load_bundle,
 )
 from software_defined_matter.assembly.model import Assembly, Dof, Instance, Mate, PartRef
+from software_defined_matter.assembly.naming import full_name, naming_problems
 from software_defined_matter.assembly.placement import (
     PlacementError,
     PlacementEval,
@@ -24,6 +25,8 @@ from software_defined_matter.assembly.process import (
 )
 
 __all__ = [
+    "full_name",
+    "naming_problems",
     "PlacementEval",
     "PlacementState",
     "PlacementError",
