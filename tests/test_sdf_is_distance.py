@@ -54,13 +54,34 @@ NEAR_SURFACE_FRACTION = 0.02
 NEAR_MEDIAN_FRAC = 0.05
 
 N_SAMPLES = 40_000
+_CHUNK = 2048  # samples per gradient batch (see _rates)
 SEED = 0
 
 # ``plane`` is deliberately absent from the shared PRIMITIVES table (it is
 # infinite, so it cannot mesh and has no bbox), but it is an exact distance
 # function and worth pinning down here.
+_BB_SQUARE = {
+    "curves": [
+        [[-8, -8, 0], [8, -8, 0]],
+        [[8, -8, 0], [8, 8, 0]],
+        [[8, 8, 0], [-8, 8, 0]],
+        [[-8, 8, 0], [-8, -8, 0]],
+    ]
+}
+_BB_DOME = {
+    "curves": [
+        [[0, 0, 6], [4, 0, 6], [8, 0, 3.6], [8, 0, 0]],
+        [[8, 0, 0], [8, 5.8, 0], [5.8, 8, 0], [0, 8, 0]],
+        [[0, 8, 0], [0, 8, 3.6], [0, 4, 6], [0, 0, 6]],
+    ],
+    "conditions": ["normal", "normal", "normal"],
+    "vectors": [[0, 1, 0], [0, 0, 1], [1, 0, 0]],
+    "reach": 20.0,
+}
 EXTRA_3D = {
     "plane": ({"n": [0.0, 0.0, 1.0], "h": 0.0}, 11.0),
+    # Unbounded cutting skins, like `plane`. Inside the patch's own reach.
+    "boundary_blend": (_BB_SQUARE | {"reach": 20.0}, 7.0),
 }
 
 ALL_3D = {**PRIMITIVES, **EXTRA_3D}
@@ -128,6 +149,7 @@ STRESS_VARIANTS.update(
             ({"r": [10.0, 1.0, 1.0]}, 12.0),  # extreme aspect ratio
             ({"r": [10.0, 10.0, 1.0]}, 12.0),  # flat disc
         ],
+        "boundary_blend": [(_BB_DOME, 7.0)],
         "box": [
             ({"b": [5.0, 3.0, 2.0], "blend": "round", "blend_r": 1.0}, 8.0),
             ({"b": [5.0, 3.0, 2.0], "blend": "chamfer", "blend_r": 1.0}, 8.0),
@@ -243,8 +265,14 @@ def _rates(name, kwargs, half, dim):
     def scalar(x):
         return jnp.reshape(_PRIMITIVES[name](x[None, :], **kwargs), ())
 
-    d = np.asarray(jax.vmap(scalar)(p))
-    g = np.asarray(jnp.linalg.norm(jax.vmap(jax.grad(scalar))(p), axis=-1))
+    # In chunks: the same samples, but a primitive with an iterative inner
+    # solve (boundary_blend) would otherwise hold every sample's working at
+    # once (~18 GB here), more than a CI runner has.
+    value = jax.jit(jax.vmap(scalar))
+    rate = jax.jit(lambda q: jnp.linalg.norm(jax.vmap(jax.grad(scalar))(q), axis=-1))
+    chunks = [p[i : i + _CHUNK] for i in range(0, p.shape[0], _CHUNK)]
+    d = np.concatenate([np.asarray(value(c)) for c in chunks])
+    g = np.concatenate([np.asarray(rate(c)) for c in chunks])
 
     keep = np.isfinite(d) & np.isfinite(g)
     assert keep.all(), (

@@ -281,6 +281,10 @@ def _compile_primitive(node: dict[str, Any], binding: ParamBinding) -> SDFClosur
         raise ValueError(f"Unknown primitive {kind!r}")
     if kind == "raster_field":
         return _compile_raster_field(node)
+    if kind == "boundary_blend":
+        from software_defined_matter.sdf.sdf_boundary_blend import compile_boundary_blend
+
+        return compile_boundary_blend(node, binding)
     prim_fn = _PRIMITIVES[kind]
     raw_kwargs = dict(_primitive_kwargs(node))
     # Structural strings and flags (e.g. a box's `blend`) choose code paths,

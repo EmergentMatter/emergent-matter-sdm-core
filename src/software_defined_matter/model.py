@@ -56,6 +56,7 @@ _CAPABILITY_MIN_VERSION: dict[str, str] = {
     "shear_linear": "0.6",
     "taper_linear": "0.6",
     "scale_axis": "0.6",
+    "boundary_blend": "0.6",
     # `blend` on union / intersect / subtract / box / capped_cylinder
     "edge_blend": "0.6",
     "param_expr": "0.3",
@@ -960,7 +961,12 @@ def _capabilities_used(part: Part) -> set[str]:
         if isinstance(value, dict):
             if value.get("type") == "unop" and value.get("op") in {"sin", "cos"}:
                 used.add("trig_expr")
-            if value.get("kind") in {"raster_field", "axis_ramp", "radial_hermite"}:
+            if value.get("kind") in {
+                "raster_field",
+                "axis_ramp",
+                "radial_hermite",
+                "boundary_blend",
+            }:
                 used.add(value["kind"])
             params = value.get("params")
             if (
@@ -1243,6 +1249,37 @@ def sdf_2d_to_3d(method: str, child_2d: SDFTree, **kwargs: Any) -> SDFTree:
     if kwargs:
         node["params"] = kwargs
     return node
+
+
+def sdf_boundary_blend(
+    curves: list[Any],
+    conditions: list[Any] | None = None,
+    reach: float | None = None,
+    flip: bool = False,
+    fold: str | None = None,
+    *,
+    guides: list[Any] | None = None,
+    check: bool = True,
+) -> SDFTree:
+    """A boundary-blend cutting skin (see ``sdf.sdf_boundary_blend``).
+
+    ``curves``: 3 or 4 Bezier control-point lists, head to tail round the
+    patch. ``conditions``: one per curve, ``"free"``, ``("normal", vec)`` or
+    ``("tangent", vec)``, optionally with a weight as a third item.
+    ``guides``: curves across the patch in either direction. ``reach``: how
+    far (mm) the skin carries on past its edges. ``flip`` swaps the negative
+    side; ``fold`` (e.g. ``"xyz"``) mirrors a skin built in the positive
+    corner about those planes. ``check`` refuses a skin that folds over.
+
+    Negative on the side from which the loop runs counter-clockwise; use it
+    as a cutter: ``sdf_op("subtract", [block, skin])``.
+    """
+    from software_defined_matter.sdf.sdf_boundary_blend import boundary_blend_params
+
+    return sdf_primitive(
+        "boundary_blend",
+        **boundary_blend_params(curves, conditions, reach, flip, fold, guides=guides, check=check),
+    )
 
 
 def sdf_sweep(

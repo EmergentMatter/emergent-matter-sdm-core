@@ -224,6 +224,11 @@ def _sample_kwargs(spec: wire.NodeSpec) -> dict[str, Any]:
             out[p.name] = [[float(i), 0.0, 0.0][: p.point_dim] for i in range(n)]
         elif p.wire_shape == "scalar_list":
             out[p.name] = [0.0, 1.0]
+        elif p.wire_shape == "point_list_list":
+            n = p.min_points or 2
+            out[p.name] = [[[float(i), 0.0, 0.0][: p.point_dim] for i in range(n)]]
+        elif p.wire_shape == "string_list":
+            out[p.name] = [p.choices[0] if p.choices else "x"]
         elif p.wire_shape == "string":
             out[p.name] = p.choices[0] if p.choices else "x"
         elif p.wire_shape == "bool":
@@ -548,7 +553,7 @@ def test_sdf_node_versions_match_their_schema_introduction():
         wire.FIELD_PRIMITIVES,
         wire.FIELD_OPS,
     ]
-    added_in_0_6 = {"shear_linear", "taper_linear", "scale_axis"}
+    added_in_0_6 = {"shear_linear", "taper_linear", "scale_axis", "boundary_blend"}
     # Edge treatments: new optional params on nodes that are older.
     params_added_in_0_6 = {"blend", "blend_r"}
     for registry in registries:
