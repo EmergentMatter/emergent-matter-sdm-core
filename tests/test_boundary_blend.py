@@ -312,3 +312,20 @@ def test_rate_is_unknown():
     tree = sdf_op("subtract", [sdf_primitive("box", b=[5.0, 5.0, 5.0]), skin])
     part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)])
     assert infer_sdf_max_rate(tree, part) == UNKNOWN
+
+
+def test_spatial_gradient_is_the_normal_on_and_near_the_skin():
+    """Exactly on the skin, and a hair off it, the field's slope is the unit
+    normal (not zero, not tangential)."""
+    p = Patch(_square(), ["free"] * 4, [[0, 0, 1]] * 4, [1] * 4)
+    grad = jax.vmap(jax.grad(lambda x: signed_distance(x[None], p, 40.0)[0]))
+    q = jnp.array([[3.0, 4.0, 0.0], [3.0, 4.0, 1e-4], [7.0, 2.0, -1e-4]])
+    assert np.allclose(grad(q), [[0, 0, -1]] * 3, atol=1e-5)
+
+    curves, conds = _soap_quarter()
+    dome = Patch(curves, [c[0] for c in conds], [c[1] for c in conds], [1, 1, 1])
+    on = jnp.stack([dome.S(0.4, 0.5), dome.S(0.7, 0.2)])  # points ON the skin
+    g = jax.vmap(jax.grad(lambda x: signed_distance(x[None], dome, 56.0)[0]))(on)
+    n = jnp.stack([dome.normal(0.4, 0.5), dome.normal(0.7, 0.2)])
+    assert np.allclose(np.linalg.norm(g, axis=1), 1.0, atol=1e-4)
+    assert np.allclose(g, n, atol=1e-3)

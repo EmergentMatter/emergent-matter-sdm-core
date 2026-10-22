@@ -162,9 +162,21 @@ def signed_distance(p, patch: Patch, reach, flip=False):
         if patch.pole:
             nrm = jnp.where(vn < 0.0, -nrm, nrm)
         r = q - foot
-        dist = jnp.sqrt(jnp.sum(r * r) + 1e-20)
-        side = jnp.where(jnp.dot(r, nrm) >= 0.0, 1.0, -1.0)
-        return dist * side
+        n_hat = nrm / jnp.sqrt(jnp.sum(nrm * nrm) + 1e-30)
+        along = jnp.dot(r, n_hat)  # the gap measured along the normal
+        gap = jnp.sqrt(jnp.sum(r * r) + 1e-20)  # its length
+        side = jnp.where(along >= 0.0, 1.0, -1.0)
+        # At a true foot the gap lies along the normal, and the two agree; use
+        # `along` there, so the spatial gradient is the unit normal even ON the
+        # skin (the length's gradient vanishes where the gap is zero). Where
+        # the search stopped at the end of the extension the gap is not along
+        # the normal, and `along` could fall to zero beside the skin: keep the
+        # length there (with its sign). Gaps under 1e-4 mm count as at the
+        # foot whatever their direction: there the foot itself is only found
+        # to ~1e-6 mm, sideways as often as not, and the two measures differ
+        # by less than the allowance.
+        at_foot = jnp.abs(along) >= 0.98 * gap - 1e-4
+        return jnp.where(at_foot, along, side * gap)
 
     flat = p.reshape(-1, 3)
     out = jax.lax.map(one, flat, batch_size=_BATCH)
