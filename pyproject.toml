@@ -201,6 +201,7 @@ module = [
     "software_defined_matter.sdf.sdf_ops",
     "software_defined_matter.sdf.transforms",
     "software_defined_matter.sdf._helpers",
+    "software_defined_matter.sdf.sdf_edge_blends",
 ]
 disallow_untyped_defs = false
 

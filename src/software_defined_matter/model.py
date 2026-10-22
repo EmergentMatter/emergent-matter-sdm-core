@@ -56,6 +56,8 @@ _CAPABILITY_MIN_VERSION: dict[str, str] = {
     "shear_linear": "0.6",
     "taper_linear": "0.6",
     "scale_axis": "0.6",
+    # `blend` on union / intersect / subtract / box / capped_cylinder
+    "edge_blend": "0.6",
     "param_expr": "0.3",
     "prior_params": "0.3",
 }
@@ -960,6 +962,13 @@ def _capabilities_used(part: Part) -> set[str]:
                 used.add("trig_expr")
             if value.get("kind") in {"raster_field", "axis_ramp", "radial_hermite"}:
                 used.add(value["kind"])
+            params = value.get("params")
+            if (
+                value.get("type") in ("op", "primitive")
+                and isinstance(params, dict)
+                and ("blend" in params or "blend_r" in params)
+            ):
+                used.add("edge_blend")
             if value.get("type") == "deform" and value.get("deform") in _CAPABILITY_MIN_VERSION:
                 used.add(value["deform"])
             if (

@@ -181,12 +181,12 @@ def test_field_primitive_param_names_match_runtime_signature(name):
 )
 def test_op_k_param_matches_smooth_dispatch(name):
     """Every op compile.py routes through the smoothing table takes exactly
-    ``k``; the three hard ops take none."""
+    ``k``; the three hard ops take only their optional edge treatment."""
     spec = wire.OPS[name]
     if name in sdf_compile._SMOOTH_BINARY_OPS:
         assert spec.param_names() == ("k",)
     else:
-        assert spec.param_names() == ()
+        assert spec.param_names() == ("blend", "blend_r")
 
 
 # ---------------------------------------------------------------------------
@@ -548,17 +548,19 @@ def test_sdf_node_versions_match_their_schema_introduction():
         wire.FIELD_PRIMITIVES,
         wire.FIELD_OPS,
     ]
+    added_in_0_6 = {"shear_linear", "taper_linear", "scale_axis"}
+    # Edge treatments: new optional params on nodes that are older.
+    params_added_in_0_6 = {"blend", "blend_r"}
     for registry in registries:
         for spec in registry.values():
-            expected = (
-                "0.6" if spec.name in {"shear_linear", "taper_linear", "scale_axis"} else "0.1"
-            )
+            expected = "0.6" if spec.name in added_in_0_6 else "0.1"
             assert spec.since == expected, (
                 f"{spec.name}: expected since={expected!r}, got {spec.since!r}"
             )
             for p in spec.params:
-                assert p.since == expected, (
-                    f"{spec.name}.{p.name}: expected since={expected!r}, got {p.since!r}"
+                p_expected = "0.6" if p.name in params_added_in_0_6 else expected
+                assert p.since == p_expected, (
+                    f"{spec.name}.{p.name}: expected since={p_expected!r}, got {p.since!r}"
                 )
     for singleton in (wire.SWEEP, wire.LOFT):
         assert singleton.since == "0.1"

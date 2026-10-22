@@ -183,9 +183,19 @@
     "0.6": {
       "file": "sdm-0.6.schema.json",
       "added": [
+        "box.blend",
+        "box.blend_r",
+        "capped_cylinder.blend",
+        "capped_cylinder.blend_r",
+        "intersect.blend",
+        "intersect.blend_r",
         "scale_axis",
         "shear_linear",
-        "taper_linear"
+        "subtract.blend",
+        "subtract.blend_r",
+        "taper_linear",
+        "union.blend",
+        "union.blend_r"
       ]
     }
   }

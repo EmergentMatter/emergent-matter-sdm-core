@@ -128,6 +128,14 @@ STRESS_VARIANTS.update(
             ({"r": [10.0, 1.0, 1.0]}, 12.0),  # extreme aspect ratio
             ({"r": [10.0, 10.0, 1.0]}, 12.0),  # flat disc
         ],
+        "box": [
+            ({"b": [5.0, 3.0, 2.0], "blend": "round", "blend_r": 1.0}, 8.0),
+            ({"b": [5.0, 3.0, 2.0], "blend": "chamfer", "blend_r": 1.0}, 8.0),
+        ],
+        "capped_cylinder": [
+            ({"h": 4.0, "r": 3.0, "blend": "round", "blend_r": 1.0}, 8.0),
+            ({"h": 4.0, "r": 3.0, "blend": "chamfer", "blend_r": 1.0}, 8.0),
+        ],
         "capped_cone": [
             ({"h": 8.0, "r1": 8.0, "r2": 0.0}, 12.0),  # degenerate tip
         ],

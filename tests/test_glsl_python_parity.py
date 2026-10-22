@@ -47,6 +47,7 @@ from software_defined_matter.glsl.emit import (
     _FIELD_DEFAULTS,
     _FIELD_SPECS,
     _PRIM_SPECS,
+    BLEND_PARAMS,
     _sweep_frame_arrays,
     _sweep_structure,
     emit_glsl,
@@ -94,9 +95,16 @@ def _glsl_params(lib: str, fn_name: str) -> list[str]:
     return names[1:]  # drop `p`
 
 
+def _py_params(kind: str) -> list[str]:
+    """Python parameter names after ``p``, less the edge-treatment params
+    (emitted inline, never passed to a lib.glsl function)."""
+    params = list(inspect.signature(_PRIMITIVES[kind]).parameters)[1:]
+    return [n for n in params if n not in BLEND_PARAMS]
+
+
 def _expected(kind: str) -> list[str]:
     """Python parameter names, with documented GLSL aliases applied."""
-    py = list(inspect.signature(_PRIMITIVES[kind]).parameters)[1:]
+    py = _py_params(kind)
     return [NAME_ALIASES.get((kind, n), n) for n in py]
 
 
@@ -117,7 +125,7 @@ def test_emitter_spec_matches_python(kind):
     Compared against the Python names rather than the GLSL ones: PrimSpec keys
     are looked up in the ``.sdm`` params dict, which uses the Python spelling.
     """
-    py = list(inspect.signature(_PRIMITIVES[kind]).parameters)[1:]
+    py = _py_params(kind)
     spec = [name for name, _ in _PRIM_SPECS[kind].args]
     assert spec == py, f"_PRIM_SPECS[{kind!r}] mismatch\n  python: {py}\n  spec  : {spec}"
 
