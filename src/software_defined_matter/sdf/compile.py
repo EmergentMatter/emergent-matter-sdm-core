@@ -282,11 +282,19 @@ def _compile_primitive(node: dict[str, Any], binding: ParamBinding) -> SDFClosur
     if kind == "raster_field":
         return _compile_raster_field(node)
     prim_fn = _PRIMITIVES[kind]
-    raw_kwargs = _primitive_kwargs(node)
+    raw_kwargs = dict(_primitive_kwargs(node))
+    # Structural strings and flags (e.g. a box's `blend`) choose code paths,
+    # never enter the arithmetic, and cannot be traced: pass them as-is.
+    static = {
+        k: raw_kwargs.pop(k)
+        for k in list(raw_kwargs)
+        if (spec := wire.PRIMITIVES[kind].get_param(k)) is not None
+        and spec.wire_shape in ("string", "bool")
+    }
 
     def fn(p: jnp.ndarray, free_vec: jnp.ndarray) -> jnp.ndarray:
         resolved = resolve_param_kwargs(raw_kwargs, binding, free_vec)
-        return prim_fn(p, **resolved)
+        return prim_fn(p, **resolved, **static)
 
     return fn
 
@@ -383,6 +391,25 @@ def _compile_op(
         raise ValueError("CSG op has no children")
 
     kwargs = _op_kwargs(node)
+
+    blend = kwargs.get("blend", "sharp")
+    if op_name in _BINARY_OPS and blend != "sharp":
+        # An explicit edge treatment wins over the part-wide smooth promotion.
+        from software_defined_matter.sdf import sdf_edge_blends as eb
+
+        combine_n = {
+            "union": eb.blend_union,
+            "intersect": eb.blend_intersect,
+            "subtract": eb.blend_subtract,
+        }[op_name]
+        r_raw = kwargs.get("blend_r", 0.0)
+
+        def fn(p: jnp.ndarray, free_vec: jnp.ndarray) -> jnp.ndarray:
+            r = resolve_param_value(r_raw, binding, free_vec)
+            stacked = jnp.stack([c(p, free_vec) for c in children], axis=-1)
+            return combine_n(stacked, blend, r)
+
+        return fn
 
     if op_name in _BINARY_OPS:
         if b_smooth_csg:

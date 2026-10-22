@@ -307,12 +307,18 @@ class NodeSpec:
 # 3-D primitives
 # ===========================================================================
 # fmt: off
+#: Edge treatments a boolean (and `box`, `capped_cylinder`) can be given; see
+#: sdf/sdf_edge_blends.py. Mirrored there as ``BLENDS``.
+_BLENDS = ("sharp", "round", "chamfer")
+
 PRIMITIVES: dict[str, NodeSpec] = {
     "sphere": NodeSpec("sphere", "primitive", dim=3, params=(
         ParamSpec("r", True, "scalar"),
     )),
     "box": NodeSpec("box", "primitive", dim=3, params=(
         ParamSpec("b", True, "vec3"),
+        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.6"),
+        ParamSpec("blend_r", False, "scalar", since="0.6"),
     )),
     "round_box": NodeSpec("round_box", "primitive", dim=3, params=(
         ParamSpec("b", True, "vec3"),
@@ -387,6 +393,8 @@ PRIMITIVES: dict[str, NodeSpec] = {
     "capped_cylinder": NodeSpec("capped_cylinder", "primitive", dim=3, params=(
         ParamSpec("h", True, "scalar"),
         ParamSpec("r", True, "scalar"),
+        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.6"),
+        ParamSpec("blend_r", False, "scalar", since="0.6"),
     )),
     "rounded_cylinder": NodeSpec("rounded_cylinder", "primitive", dim=3, params=(
         ParamSpec("ra", True, "scalar"),
@@ -517,9 +525,20 @@ LATTICE_PRIMITIVES = frozenset(name for name, spec in PRIMITIVES.items() if spec
 # ===========================================================================
 # fmt: off
 OPS: dict[str, NodeSpec] = {
-    "union": NodeSpec("union", "op"),
-    "subtract": NodeSpec("subtract", "op", removes_material=True),
-    "intersect": NodeSpec("intersect", "op"),
+    # `blend` / `blend_r`: how the faces meet at the edges the boolean makes
+    # (sdf/sdf_edge_blends.py); absent = sharp, as before.
+    "union": NodeSpec("union", "op", params=(
+        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.6"),
+        ParamSpec("blend_r", False, "scalar", since="0.6"),
+    )),
+    "subtract": NodeSpec("subtract", "op", removes_material=True, params=(
+        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.6"),
+        ParamSpec("blend_r", False, "scalar", since="0.6"),
+    )),
+    "intersect": NodeSpec("intersect", "op", params=(
+        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.6"),
+        ParamSpec("blend_r", False, "scalar", since="0.6"),
+    )),
     "smooth_union": NodeSpec("smooth_union", "op", params=(
         ParamSpec("k", True, "scalar"),
     )),

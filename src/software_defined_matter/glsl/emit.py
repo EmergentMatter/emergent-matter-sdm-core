@@ -360,6 +360,50 @@ class GLSLEmission:
 # ---------------------------------------------------------------------------
 
 
+#: Edge-treatment params (sdf_edge_blends). A primitive carrying them is
+#: emitted inline by ``_emit_blended_primitive``, never through its lib.glsl
+#: function, so they are not part of any lib.glsl signature.
+BLEND_PARAMS = ("blend", "blend_r")
+
+
+def _glsl_blend(ds: list[str], op: str, blend: str, r_expr: str) -> list[str]:
+    """GLSL lines combining distances ``ds`` as ``op`` with an edge treatment,
+    ending in ``return``. Mirrors sdf/sdf_edge_blends.py term for term."""
+    if op == "subtract":
+        ds = [ds[0]] + [f"(-{d})" for d in ds[1:]]
+        op = "intersect"
+    lines = [f"float R = {r_expr};"]
+    lines += [f"float e{i} = {d};" for i, d in enumerate(ds)]
+    es = [f"e{i}" for i in range(len(ds))]
+
+    def fold(fn: str, xs: list[str]) -> str:
+        out = xs[0]
+        for x in xs[1:]:
+            out = f"{fn}({out}, {x})"
+        return out
+
+    pairs = [(a, b) for k, a in enumerate(es) for b in es[k + 1 :]]
+    if blend == "round":
+        if op == "intersect":
+            lines += [f"float t{i} = max({e} + R, 0.0);" for i, e in enumerate(es)]
+            ss = " + ".join(f"t{i} * t{i}" for i in range(len(es)))
+            lines.append(f"return min(-R, {fold('max', es)}) + sqrt({ss} + 1e-30);")
+        else:
+            lines += [f"float t{i} = max(R - {e}, 0.0);" for i, e in enumerate(es)]
+            ss = " + ".join(f"t{i} * t{i}" for i in range(len(es)))
+            lines.append(f"return max(R, {fold('min', es)}) - sqrt({ss} + 1e-30);")
+    elif blend == "chamfer":
+        if op == "intersect":
+            ch = [f"(({a} + {b} + R) * 0.7071067811865476)" for a, b in pairs]
+            lines.append(f"return {fold('max', [fold('max', es)] + ch)};")
+        else:
+            ch = [f"(({a} + {b} - R) * 0.7071067811865476)" for a, b in pairs]
+            lines.append(f"return {fold('min', [fold('min', es)] + ch)};")
+    else:
+        raise ValueError(f"unknown blend {blend!r}")
+    return lines
+
+
 class _GLSLEmitter:
     """Recursive walker; one instance per emit_glsl call."""
 
@@ -702,6 +746,8 @@ class _GLSLEmitter:
             return self._emit_polygon_2d(node)
 
         raw_kwargs = node.get("params") or {}
+        if kind in ("box", "capped_cylinder") and raw_kwargs.get("blend", "sharp") != "sharp":
+            return self._emit_blended_primitive(node)
         arg_exprs: list[str] = []
         for arg_name, arg_type in spec.args:
             if arg_name not in raw_kwargs:
@@ -714,6 +760,25 @@ class _GLSLEmitter:
         fn = self._fn_name(dim)
         call = f"{_lib_fn(kind)}(p, {', '.join(arg_exprs)})"
         self._emit_function(f"float {fn}(vec{dim} p)", [f"return {call};"])
+        return fn
+
+    def _emit_blended_primitive(self, node: dict[str, Any]) -> str:
+        """``box`` / ``capped_cylinder`` with an edge treatment, inline
+        (mirrors sdf_shapes + sdf_edge_blends.blend_intersect)."""
+        kw = node.get("params") or {}
+        r_expr = self._emit_value(kw.get("blend_r", 0.0), "float")
+        if node["kind"] == "box":
+            b_expr = self._emit_value(kw["b"], "vec3")
+            head = [f"vec3 q = abs(p) - {b_expr};"]
+            faces = ["q.x", "q.y", "q.z"]
+        else:
+            h_expr = self._emit_value(kw["h"], "float")
+            rad_expr = self._emit_value(kw["r"], "float")
+            head = [f"vec2 q = vec2(length(p.xy) - {rad_expr}, abs(p.z) - {h_expr});"]
+            faces = ["q.x", "q.y"]
+        body = head + _glsl_blend(faces, "intersect", kw["blend"], r_expr)
+        fn = self._fn_name(3)
+        self._emit_function(f"float {fn}(vec3 p)", body)
         return fn
 
     def _emit_raster_field(self, node: dict[str, Any]) -> str:
@@ -1314,8 +1379,14 @@ class _GLSLEmitter:
         child_fns = [self.emit_node(c, dim=dim) for c in children]
         kwargs = node.get("params") or {}
 
-        # Hard CSG: may be promoted to smooth via metadata flag.
-        if op_name in _HARD_BINARY_OPS:
+        blend = kwargs.get("blend", "sharp")
+        # Hard CSG: may be promoted to smooth via metadata flag, unless the
+        # op names its own edge treatment (which wins, as in compile.py).
+        if op_name in _HARD_BINARY_OPS and blend != "sharp":
+            r_expr = self._emit_value(kwargs.get("blend_r", 0.0), "float")
+            body = [f"float c{i} = {f}(p);" for i, f in enumerate(child_fns)]
+            body += _glsl_blend([f"c{i}" for i in range(len(child_fns))], op_name, blend, r_expr)
+        elif op_name in _HARD_BINARY_OPS:
             if self.smooth_csg:
                 smooth_name = _HARD_TO_SMOOTH[op_name]
                 k_expr = _float_literal(self.smooth_k)
