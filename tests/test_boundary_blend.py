@@ -276,7 +276,9 @@ def test_volume_is_differentiable_in_a_control_point(crowned):
     from software_defined_matter.objectives.metrics import fraction_filled
 
     f, _ = crowned
-    h = 1.0
+    # a coarse grid keeps reverse-mode memory small (both sides of the check
+    # use the same grid, so it is just as strict)
+    h = 2.0
     xs = jnp.arange(-46.0, 46.01, h)
     ys = jnp.arange(-31.0, 31.01, h)
     zs = jnp.arange(-15.0, 15.01, h)
@@ -286,7 +288,8 @@ def test_volume_is_differentiable_in_a_control_point(crowned):
         return jnp.sum(fraction_filled(f(g, v), h)) * h**3
 
     fv = jnp.asarray([14.0])
-    dv = float(jax.grad(volume)(fv)[0])
+    # one parameter: forward mode is the natural (and far lighter) way
+    dv = float(jax.jacfwd(volume)(fv)[0])
     e = 0.05
     fd = float((volume(fv + e) - volume(fv - e)) / (2 * e))
     assert abs(dv - fd) < 0.02 * abs(fd), (dv, fd)

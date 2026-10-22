@@ -54,6 +54,7 @@ NEAR_SURFACE_FRACTION = 0.02
 NEAR_MEDIAN_FRAC = 0.05
 
 N_SAMPLES = 40_000
+_CHUNK = 2048  # samples per gradient batch (see _rates)
 SEED = 0
 
 # ``plane`` is deliberately absent from the shared PRIMITIVES table (it is
@@ -264,8 +265,14 @@ def _rates(name, kwargs, half, dim):
     def scalar(x):
         return jnp.reshape(_PRIMITIVES[name](x[None, :], **kwargs), ())
 
-    d = np.asarray(jax.vmap(scalar)(p))
-    g = np.asarray(jnp.linalg.norm(jax.vmap(jax.grad(scalar))(p), axis=-1))
+    # In chunks: the same samples, but a primitive with an iterative inner
+    # solve (boundary_blend) would otherwise hold every sample's working at
+    # once (~18 GB here), more than a CI runner has.
+    value = jax.jit(jax.vmap(scalar))
+    rate = jax.jit(lambda q: jnp.linalg.norm(jax.vmap(jax.grad(scalar))(q), axis=-1))
+    chunks = [p[i : i + _CHUNK] for i in range(0, p.shape[0], _CHUNK)]
+    d = np.concatenate([np.asarray(value(c)) for c in chunks])
+    g = np.concatenate([np.asarray(rate(c)) for c in chunks])
 
     keep = np.isfinite(d) & np.isfinite(g)
     assert keep.all(), (
