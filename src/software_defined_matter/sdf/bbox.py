@@ -309,6 +309,7 @@ def _infer_primitive_bbox(node: dict[str, Any], intervals: dict[str, Interval]) 
     # node (2D primitives). Neither has a meaningful 3D bbox on its own.
     if kind in (
         "plane",
+        "boundary_blend",
         "circle_2d",
         "box_2d",
         "rounded_box_2d",

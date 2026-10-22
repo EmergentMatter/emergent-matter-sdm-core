@@ -80,8 +80,8 @@ def _walk(node: Any, *, can_be_unbounded: bool, region_name: str) -> None:
     node_type = node["type"]
 
     if node_type == "primitive":
-        if node.get("kind") == "plane" and not can_be_unbounded:
-            raise UnboundedRootError(_plane_message(region_name))
+        if node.get("kind") in _CUTTERS and not can_be_unbounded:
+            raise UnboundedRootError(_plane_message(region_name, node["kind"]))
         return
 
     if node_type == "op":
@@ -135,8 +135,19 @@ def _check_phase_frac_requires_centered(node: dict[str, Any], path: str) -> None
     )
 
 
-def _plane_message(region_name: str) -> str:
+#: Unbounded primitives that are only valid as CSG cutting tools.
+_CUTTERS = ("plane", "boundary_blend")
+
+
+def _plane_message(region_name: str, kind: str = "plane") -> str:
     prefix = f"MaterialRegion {region_name!r}: " if region_name else ""
+    if kind == "boundary_blend":
+        return (
+            f"{prefix}`boundary_blend` is a cutting skin (unbounded: it carries on past "
+            "its edges) and cannot appear here. Use it as the second operand of "
+            "`subtract(<bounded shape>, skin)` to cut away the skin's negative side, or "
+            "as an operand of `intersect(<bounded shape>, skin)` to keep it."
+        )
     return (
         f"{prefix}`plane` is mathematically infinite and cannot appear here. "
         "A plane is only valid as a CSG cutting tool: wrap it as the second "

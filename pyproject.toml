@@ -202,6 +202,9 @@ module = [
     "software_defined_matter.sdf.transforms",
     "software_defined_matter.sdf._helpers",
     "software_defined_matter.sdf.sdf_edge_blends",
+    "software_defined_matter.sdf.sdf_boundary_blend",
+    "software_defined_matter.sdf.boundary_blend_patch",
+    "software_defined_matter.sdf.boundary_blend_check",
 ]
 disallow_untyped_defs = false
 

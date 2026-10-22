@@ -59,8 +59,30 @@ SEED = 0
 # ``plane`` is deliberately absent from the shared PRIMITIVES table (it is
 # infinite, so it cannot mesh and has no bbox), but it is an exact distance
 # function and worth pinning down here.
+_BB_SQUARE = {
+    f"curve_{i + 1}": [a, b]
+    for i, (a, b) in enumerate(
+        [
+            ([-8, -8, 0], [8, -8, 0]),
+            ([8, -8, 0], [8, 8, 0]),
+            ([8, 8, 0], [-8, 8, 0]),
+            ([-8, 8, 0], [-8, -8, 0]),
+        ]
+    )
+}
+_BB_DOME = {
+    "curve_1": [[0, 0, 6], [4, 0, 6], [8, 0, 3.6], [8, 0, 0]],
+    "curve_2": [[8, 0, 0], [8, 5.8, 0], [5.8, 8, 0], [0, 8, 0]],
+    "curve_3": [[0, 8, 0], [0, 8, 3.6], [0, 4, 6], [0, 0, 6]],
+    "normal_1": [0, 1, 0],
+    "normal_2": [0, 0, 1],
+    "normal_3": [1, 0, 0],
+    "reach": 20.0,
+}
 EXTRA_3D = {
     "plane": ({"n": [0.0, 0.0, 1.0], "h": 0.0}, 11.0),
+    # Unbounded cutting skins, like `plane`. Inside the patch's own reach.
+    "boundary_blend": (_BB_SQUARE | {"reach": 20.0}, 7.0),
 }
 
 ALL_3D = {**PRIMITIVES, **EXTRA_3D}
@@ -128,6 +150,7 @@ STRESS_VARIANTS.update(
             ({"r": [10.0, 1.0, 1.0]}, 12.0),  # extreme aspect ratio
             ({"r": [10.0, 10.0, 1.0]}, 12.0),  # flat disc
         ],
+        "boundary_blend": [(_BB_DOME, 7.0)],
         "box": [
             ({"b": [5.0, 3.0, 2.0], "blend": "round", "blend_r": 1.0}, 8.0),
             ({"b": [5.0, 3.0, 2.0], "blend": "chamfer", "blend_r": 1.0}, 8.0),

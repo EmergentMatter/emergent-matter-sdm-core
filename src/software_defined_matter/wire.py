@@ -367,6 +367,26 @@ PRIMITIVES: dict[str, NodeSpec] = {
         ParamSpec("n", True, "vec3"),
         ParamSpec("h", True, "scalar"),
     )),
+    # A skin through a loop of 3-4 boundary curves plus guides (Gordon /
+    # Coons, sdf/sdf_boundary_blend.py). Unbounded like `plane`: a cutting
+    # tool. Curve / guide control points may be $refs (differentiable); the
+    # conditions, reach, flip and fold are structural (literal).
+    "boundary_blend": NodeSpec("boundary_blend", "primitive", dim=3, since="0.6", params=(
+        *(spec
+          for i in range(1, 5)
+          for spec in (
+              ParamSpec(f"curve_{i}", i <= 3, "point_list", point_dim=3,
+                        min_points=1, since="0.6"),
+              ParamSpec(f"normal_{i}", False, "vec3", ref_ok=False, since="0.6"),
+              ParamSpec(f"tangent_{i}", False, "vec3", ref_ok=False, since="0.6"),
+              ParamSpec(f"weight_{i}", False, "scalar", ref_ok=False, since="0.6"),
+          )),
+        *(ParamSpec(f"guide_{k}", False, "point_list", point_dim=3,
+                    min_points=2, since="0.6") for k in range(1, 13)),
+        ParamSpec("reach", False, "scalar", ref_ok=False, since="0.6"),
+        ParamSpec("flip", False, "bool", ref_ok=False, since="0.6"),
+        ParamSpec("fold", False, "vec3", ref_ok=False, since="0.6"),
+    )),
     # Sampled distance grid (DR-0003). Topology-class slots are ref_ok=False:
     # changing them selects how many samples exist, so they require re-emit.
     # ``spacing`` is authored as vec3 (scalar broadcasts happen in the builder).

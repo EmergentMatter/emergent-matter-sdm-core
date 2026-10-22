@@ -348,6 +348,15 @@ def capped_cylinder(p, h, r, blend="sharp", blend_r=0.0):
     return jnp.minimum(jnp.max(d, axis=-1), 0.0) + _length(jnp.maximum(d, 0.0))
 
 
+def boundary_blend(p, **params):
+    """Signed distance to a boundary-blend skin (sdf_boundary_blend). Called
+    with the node's literal params; the compiler builds the surface once
+    instead (``compile_boundary_blend``)."""
+    from software_defined_matter.sdf.sdf_boundary_blend import _prim
+
+    return _prim(p, **params)
+
+
 def rounded_cylinder(p, ra, rb, h):
     """Exact SDF for a rounded cylinder."""
     d = jnp.stack([_length(p[..., :2]) - 2.0 * ra + rb, jnp.abs(p[..., 2]) - h], axis=-1)

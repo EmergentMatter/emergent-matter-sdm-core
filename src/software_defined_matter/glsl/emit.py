@@ -734,6 +734,11 @@ class _GLSLEmitter:
             if dim != 2:
                 raise ValueError(f"Primitive {kind!r} is 2-D but used in a {dim}-D context.")
             return self._emit_polygon_2d(self._curve_to_polygon(node))
+        if kind == "boundary_blend":
+            raise ValueError(
+                "boundary_blend has no GLSL routine (its foot-point solver is iterative): "
+                "bake it to a raster_field for viewing (see sdf.bake.bake_raster_field)"
+            )
         if kind not in _PRIM_SPECS:
             raise ValueError(f"Unknown primitive {kind!r}")
         spec = _PRIM_SPECS[kind]

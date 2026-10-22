@@ -113,6 +113,11 @@ def _node_rate(node: Any, intervals: dict[str, Interval], domain: BBox | None) -
     node_type = node["type"]
 
     if node_type == "primitive":
+        # A boundary blend is an approximate signed field: exact near its
+        # skin, but its foot-point search can read long far away (see
+        # sdf_boundary_blend). No bound is claimed.
+        if node.get("kind") == "boundary_blend":
+            return UNKNOWN
         return _PRIMITIVE_RATE
 
     if node_type == "op":

@@ -183,6 +183,7 @@
     "0.6": {
       "file": "sdm-0.6.schema.json",
       "added": [
+        "boundary_blend",
         "box.blend",
         "box.blend_r",
         "capped_cylinder.blend",

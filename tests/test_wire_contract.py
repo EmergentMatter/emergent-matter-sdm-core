@@ -143,7 +143,12 @@ def test_op_contract_is_an_exact_bijection_with_compile_dispatch():
 # Wire carries a codec of the JAX sample block (dims/encoding/data), not the
 # decoded ``values`` array the evaluator takes. Same special-case class as the
 # GLSL call shape (base/n/lo/inv_h) — see DR-0003.
-_WIRE_RUNTIME_PARAM_EXCEPTIONS = frozenset({"raster_field"})
+#
+# `boundary_blend` describes a curve network (up to four curves, twelve guides,
+# a condition per curve); the compiler builds the surface from those params
+# once (sdf_boundary_blend.compile_boundary_blend) and the runtime function
+# takes them as keywords. test_boundary_blend pins that the two name sets agree.
+_WIRE_RUNTIME_PARAM_EXCEPTIONS = frozenset({"raster_field", "boundary_blend"})
 
 
 @pytest.mark.parametrize(
@@ -548,7 +553,7 @@ def test_sdf_node_versions_match_their_schema_introduction():
         wire.FIELD_PRIMITIVES,
         wire.FIELD_OPS,
     ]
-    added_in_0_6 = {"shear_linear", "taper_linear", "scale_axis"}
+    added_in_0_6 = {"shear_linear", "taper_linear", "scale_axis", "boundary_blend"}
     # Edge treatments: new optional params on nodes that are older.
     params_added_in_0_6 = {"blend", "blend_r"}
     for registry in registries:
