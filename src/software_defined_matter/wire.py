@@ -44,6 +44,10 @@ from software_defined_matter.model import ALLOWED_UNITS, PRIOR_DISTS, Constraint
 #:   point_list  - a variable-length array of ``vec2`` or ``vec3`` points
 #:   scalar_list - a variable-length array of ``scalar`` entries with no
 #:                 fixed point-dimension (only ``loft``'s ``z``)
+#:   point_list_list - a variable-length array of ``point_list`` values, each
+#:                 its own length (``boundary_blend``'s ``curves`` / ``guides``)
+#:   string_list - a variable-length array of literal strings, each from
+#:                 ``choices`` if given (``boundary_blend``'s ``conditions``)
 #:   string      - a literal string, never a ``$ref`` leaf
 #:   bool        - a literal boolean, never a ``$ref`` leaf
 #:   object      - a free-form JSON object, validated elsewhere (or not
@@ -65,6 +69,8 @@ WireShape = Literal[
     "mat3",
     "point_list",
     "scalar_list",
+    "point_list_list",
+    "string_list",
     "string",
     "bool",
     "object",
@@ -177,10 +183,11 @@ class ParamSpec:
     subtree) anywhere a number is expected, including per-element inside a
     vector or point list.
 
-    ``choices`` constrains a ``string`` slot to a closed set (e.g.
-    ``sweep``'s ``path_kind``). ``point_dim`` / ``min_points`` /
-    ``multiple_of`` refine a ``point_list`` slot: each point's dimension,
-    the minimum count, and a required multiple.
+    ``choices`` constrains a ``string`` slot (or each entry of a
+    ``string_list``) to a closed set (e.g. ``sweep``'s ``path_kind``).
+    ``point_dim`` / ``min_points`` / ``multiple_of`` refine a ``point_list``
+    slot (or each list of a ``point_list_list``): each point's dimension, the
+    minimum count, and a required multiple.
     """
 
     name: str
@@ -198,16 +205,19 @@ class ParamSpec:
             raise ValueError("ParamSpec: name must be non-empty.")
         _check_literal(self.wire_shape, WIRE_SHAPES, f"ParamSpec {self.name!r}", "wire_shape")
         _check_literal(self.since, SCHEMA_VERSIONS, f"ParamSpec {self.name!r}", "since")
-        if self.choices is not None and self.wire_shape != "string":
+        if self.choices is not None and self.wire_shape not in ("string", "string_list"):
             raise ValueError(
-                f"ParamSpec {self.name!r}: choices is only meaningful for wire_shape='string', "
-                f"got wire_shape={self.wire_shape!r}."
+                f"ParamSpec {self.name!r}: choices is only meaningful for "
+                f"wire_shape='string' or 'string_list', got wire_shape={self.wire_shape!r}."
             )
         point_only = (self.point_dim, self.min_points, self.multiple_of)
-        if self.wire_shape != "point_list" and any(v is not None for v in point_only):
+        if self.wire_shape not in ("point_list", "point_list_list") and any(
+            v is not None for v in point_only
+        ):
             raise ValueError(
                 f"ParamSpec {self.name!r}: point_dim/min_points/multiple_of are only "
-                f"meaningful for wire_shape='point_list', got wire_shape={self.wire_shape!r}."
+                f"meaningful for wire_shape='point_list' or 'point_list_list', "
+                f"got wire_shape={self.wire_shape!r}."
             )
 
 
@@ -369,20 +379,16 @@ PRIMITIVES: dict[str, NodeSpec] = {
     )),
     # A skin through a loop of 3-4 boundary curves plus guides (Gordon /
     # Coons, sdf/sdf_boundary_blend.py). Unbounded like `plane`: a cutting
-    # tool. Curve / guide control points may be $refs (differentiable); the
-    # conditions, reach, flip and fold are structural (literal).
+    # tool. One entry per curve in `conditions` / `vectors` / `weights`; any
+    # number of `guides`. Curve / guide control points may be $refs
+    # (differentiable); everything else is structural (literal).
     "boundary_blend": NodeSpec("boundary_blend", "primitive", dim=3, since="0.6", params=(
-        *(spec
-          for i in range(1, 5)
-          for spec in (
-              ParamSpec(f"curve_{i}", i <= 3, "point_list", point_dim=3,
-                        min_points=1, since="0.6"),
-              ParamSpec(f"normal_{i}", False, "vec3", ref_ok=False, since="0.6"),
-              ParamSpec(f"tangent_{i}", False, "vec3", ref_ok=False, since="0.6"),
-              ParamSpec(f"weight_{i}", False, "scalar", ref_ok=False, since="0.6"),
-          )),
-        *(ParamSpec(f"guide_{k}", False, "point_list", point_dim=3,
-                    min_points=2, since="0.6") for k in range(1, 13)),
+        ParamSpec("curves", True, "point_list_list", point_dim=3, min_points=1, since="0.6"),
+        ParamSpec("conditions", False, "string_list", ref_ok=False,
+                  choices=("free", "normal", "tangent"), since="0.6"),
+        ParamSpec("vectors", False, "point_list", ref_ok=False, point_dim=3, since="0.6"),
+        ParamSpec("weights", False, "scalar_list", ref_ok=False, since="0.6"),
+        ParamSpec("guides", False, "point_list_list", point_dim=3, min_points=2, since="0.6"),
         ParamSpec("reach", False, "scalar", ref_ok=False, since="0.6"),
         ParamSpec("flip", False, "bool", ref_ok=False, since="0.6"),
         ParamSpec("fold", False, "vec3", ref_ok=False, since="0.6"),

@@ -1285,7 +1285,32 @@
                 "type": "object",
                 "additionalProperties": false,
                 "properties": {
-                  "curve_1": {
+                  "curves": {
+                    "type": "array",
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
+                      },
+                      "minItems": 1
+                    }
+                  },
+                  "conditions": {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "free",
+                        "normal",
+                        "tangent"
+                      ]
+                    }
+                  },
+                  "vectors": {
                     "type": "array",
                     "items": {
                       "type": "array",
@@ -1294,264 +1319,28 @@
                       },
                       "minItems": 3,
                       "maxItems": 3
-                    },
-                    "minItems": 1
+                    }
                   },
-                  "normal_1": {
+                  "weights": {
                     "type": "array",
                     "items": {
                       "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
+                    }
                   },
-                  "tangent_1": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
-                  },
-                  "weight_1": {
-                    "$ref": "#/$defs/scalarValue"
-                  },
-                  "curve_2": {
+                  "guides": {
                     "type": "array",
                     "items": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/$defs/scalarValue"
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/scalarValue"
+                        },
+                        "minItems": 3,
+                        "maxItems": 3
                       },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 1
-                  },
-                  "normal_2": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
-                  },
-                  "tangent_2": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
-                  },
-                  "weight_2": {
-                    "$ref": "#/$defs/scalarValue"
-                  },
-                  "curve_3": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 1
-                  },
-                  "normal_3": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
-                  },
-                  "tangent_3": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
-                  },
-                  "weight_3": {
-                    "$ref": "#/$defs/scalarValue"
-                  },
-                  "curve_4": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 1
-                  },
-                  "normal_4": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
-                  },
-                  "tangent_4": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
-                  },
-                  "weight_4": {
-                    "$ref": "#/$defs/scalarValue"
-                  },
-                  "guide_1": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 2
-                  },
-                  "guide_2": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 2
-                  },
-                  "guide_3": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 2
-                  },
-                  "guide_4": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 2
-                  },
-                  "guide_5": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 2
-                  },
-                  "guide_6": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 2
-                  },
-                  "guide_7": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 2
-                  },
-                  "guide_8": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 2
-                  },
-                  "guide_9": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 2
-                  },
-                  "guide_10": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 2
-                  },
-                  "guide_11": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 2
-                  },
-                  "guide_12": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    },
-                    "minItems": 2
+                      "minItems": 2
+                    }
                   },
                   "reach": {
                     "$ref": "#/$defs/scalarValue"
@@ -1569,9 +1358,7 @@
                   }
                 },
                 "required": [
-                  "curve_1",
-                  "curve_2",
-                  "curve_3"
+                  "curves"
                 ]
               }
             }

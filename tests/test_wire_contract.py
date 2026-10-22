@@ -143,12 +143,7 @@ def test_op_contract_is_an_exact_bijection_with_compile_dispatch():
 # Wire carries a codec of the JAX sample block (dims/encoding/data), not the
 # decoded ``values`` array the evaluator takes. Same special-case class as the
 # GLSL call shape (base/n/lo/inv_h) — see DR-0003.
-#
-# `boundary_blend` describes a curve network (up to four curves, twelve guides,
-# a condition per curve); the compiler builds the surface from those params
-# once (sdf_boundary_blend.compile_boundary_blend) and the runtime function
-# takes them as keywords. test_boundary_blend pins that the two name sets agree.
-_WIRE_RUNTIME_PARAM_EXCEPTIONS = frozenset({"raster_field", "boundary_blend"})
+_WIRE_RUNTIME_PARAM_EXCEPTIONS = frozenset({"raster_field"})
 
 
 @pytest.mark.parametrize(
@@ -229,6 +224,11 @@ def _sample_kwargs(spec: wire.NodeSpec) -> dict[str, Any]:
             out[p.name] = [[float(i), 0.0, 0.0][: p.point_dim] for i in range(n)]
         elif p.wire_shape == "scalar_list":
             out[p.name] = [0.0, 1.0]
+        elif p.wire_shape == "point_list_list":
+            n = p.min_points or 2
+            out[p.name] = [[[float(i), 0.0, 0.0][: p.point_dim] for i in range(n)]]
+        elif p.wire_shape == "string_list":
+            out[p.name] = [p.choices[0] if p.choices else "x"]
         elif p.wire_shape == "string":
             out[p.name] = p.choices[0] if p.choices else "x"
         elif p.wire_shape == "bool":

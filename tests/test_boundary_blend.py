@@ -129,10 +129,7 @@ def test_fold_mirrors_a_quarter():
 # ---------------------------------------------------------------- guides
 def test_guides_pass_through_every_curve():
     edges, guides = _seat_network()
-    p = make_patch(
-        {f"curve_{i + 1}": c for i, c in enumerate(edges)}
-        | {f"guide_{k + 1}": g for k, g in enumerate(guides)}
-    )
+    p = make_patch({"curves": edges, "guides": guides})
     curves, gaps = guide_report(p)
     assert max(curves.values()) < 1e-4
     assert max(gaps.values()) < 1e-4
@@ -171,7 +168,11 @@ def test_conditions_must_match_curves():
 
 
 def test_impossible_tangent_is_refused():
-    params = {f"curve_{i + 1}": c for i, c in enumerate(_square())} | {"tangent_1": [1, 0, 0]}
+    params = {
+        "curves": _square(),
+        "conditions": ["tangent", "free", "free", "free"],
+        "vectors": [[1, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+    }
     with pytest.raises(ValueError, match="tangent"):
         make_patch(params)
 
@@ -208,12 +209,25 @@ def test_bake_matches_analytic():
     assert np.allclose(f(q), _closure(baked)(q), atol=0.02)
 
 
-def test_wire_params_are_what_the_runtime_takes():
-    from software_defined_matter import wire
-    from software_defined_matter.sdf.sdf_boundary_blend import _KEYS
+def test_wire_format_is_lists():
+    """One list per thing (curves, conditions, vectors, weights, guides),
+    one entry per curve, and as many guides as wanted."""
+    from software_defined_matter.sdf.validate import validate_document_semantics
 
-    names = set(wire.PRIMITIVES["boundary_blend"].param_names())
-    assert names == set(_KEYS) | {"reach", "flip", "fold"}
+    curves, conds = _soap_quarter()
+    node = sdf_boundary_blend(curves, conds, reach=56.0, check=False)
+    prm = node["params"]
+    assert set(prm) == {"curves", "conditions", "vectors", "reach"}
+    assert prm["conditions"] == ["normal", "normal", "normal"]
+    assert len(prm["vectors"]) == 3
+    tree = sdf_op("subtract", [sdf_primitive("box", b=[50.0, 35.0, 17.0]), node])
+    part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)])
+    validate_document_semantics(part.to_dict())
+    bad = dict(node, params=dict(prm, conditions=["normal", "sideways", "normal"]))
+    tree = sdf_op("subtract", [sdf_primitive("box", b=[50.0, 35.0, 17.0]), bad])
+    part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)])
+    with pytest.raises(Exception, match="sideways"):
+        validate_document_semantics(part.to_dict())
 
 
 # ---------------------------------------------------------------- differentiable

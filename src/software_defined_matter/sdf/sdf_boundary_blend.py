@@ -3,6 +3,31 @@ skin, negative on one side, positive on the other. It is a CUTTING tool,
 like a `plane` but curved: `subtract(block, skin)` keeps the side the skin's
 positive side does not cover.
 
+WHAT IT IS FOR, AND WHEN A LOFT IS BETTER. `bezier_2d` / `bspline_2d` describe
+a flat region in a plane, and `loft` / `sweep` / extrusion carry such regions
+through 3-D. A boundary blend is a different object: a surface stretched
+across 3 or 4 edge curves that are themselves 3-D and need not lie in any
+plane, plus guide curves across it, with the angle at which it leaves each
+edge set by a condition. Use it when the shape is defined by its edges: a
+saddle seat whose top edges rise and fall (examples/boundary_blend_
+differentiable.py), a fairing or flare tangent to the faces it meets, a skin
+through a curve network. If the shape is a stack of flat sections along one
+axis (a soap bar, a bottle, a straight airfoil span), build it with
+`loft` over `bspline_2d` sections instead: same surface, far cheaper.
+
+COST. About 18-36 us per query point (jit, float32, CPU; measured 18 on an
+Apple M-series laptop and 36 in review), against 0.2-2.4 us for a
+3-section `bspline_2d` loft on the same machines: 15-90x more. One 128^3
+grid is 40-75 s. Named-parameter control points cost the same per point
+(the geometry is rebuilt once per call, not per point); a gradient with
+respect to them about 1.7x that. Fine for a cutter evaluated a few times or
+an optimisation over a coarse metric grid; budget for it in a loop.
+
+PARAMETERS (one entry per curve in each per-curve list): `curves` (3 or 4
+Bezier control-point lists, head to tail), `conditions` ("free" / "normal" /
+"tangent"), `vectors` (the direction or plane normal each condition uses),
+`weights`, `guides` (any number), `reach`, `flip`, `fold`.
+
 WHICH SIDE IS NEGATIVE. The side from which the curve loop runs
 counter-clockwise. (The soap bar's loop runs counter-clockwise seen from
 above, so the skin is negative above: it is the space to cut away, as is.)
@@ -53,7 +78,6 @@ import numpy as np
 from software_defined_matter.sdf.boundary_blend_patch import MODES, Patch
 
 KIND = "boundary_blend"
-N_GUIDES = 12  # guide_1 .. guide_12, either direction
 _N_NEWTON = 20
 _BATCH = 4096
 
@@ -71,41 +95,34 @@ def _grid(n_in=17, n_out=9, dense_at_0=False):
 
 
 def make_patch(params, plan=None) -> Patch:
-    """Patch from node params (curves and guides as arrays: numbers, or
-    traced values when `plan` is given). Curve i's condition is given by
-    which key is present: `normal_i` (a direction), `tangent_i` (a plane
-    normal), or neither (free)."""
-    n = 4 if params.get("curve_4") is not None else 3
-    curves = [params[f"curve_{i}"] for i in range(1, n + 1)]
-    modes, vecs = [], []
-    for i in range(1, n + 1):
-        if params.get(f"normal_{i}") is not None:
-            modes.append("normal")
-            vecs.append(params[f"normal_{i}"])
-        elif params.get(f"tangent_{i}") is not None:
-            modes.append("tangent")
-            vecs.append(params[f"tangent_{i}"])
-        else:
-            modes.append("free")
-            vecs.append([0.0, 0.0, 1.0])
-    weights = [params.get(f"weight_{i}", 1.0) for i in range(1, n + 1)]
-    guides = [
-        params[f"guide_{k}"] for k in range(1, N_GUIDES + 1) if params.get(f"guide_{k}") is not None
-    ]
-    return Patch(curves, modes, vecs, weights, guides, plan=plan)
+    """Patch from node params: ``curves`` (3 or 4 control-point arrays) and
+    optional ``guides``, as numbers or as traced values when ``plan`` is
+    given; ``conditions`` (one of MODES per curve, default free), ``vectors``
+    (one direction / plane normal per curve, ignored for free) and
+    ``weights`` (one per curve, default 1)."""
+    curves = list(params["curves"])
+    n = len(curves)
+    if n not in (3, 4):
+        raise ValueError(f"boundary_blend needs 3 or 4 curves, got {n}")
+    modes = list(params.get("conditions") or ["free"] * n)
+    vecs = list(params.get("vectors") or [[0.0, 0.0, 1.0]] * n)
+    weights = list(params.get("weights") or [1.0] * n)
+    for name, vals in (("conditions", modes), ("vectors", vecs), ("weights", weights)):
+        if len(vals) != n:
+            raise ValueError(
+                f"boundary_blend: {n} curves but {len(vals)} {name}: give one per curve"
+            )
+    for k, (m, v) in enumerate(zip(modes, vecs, strict=True)):
+        if m == "free" and not np.any(np.asarray(v, float)):
+            vecs[k] = [0.0, 0.0, 1.0]  # unused, but must be a direction
+    return Patch(curves, modes, vecs, weights, list(params.get("guides") or []), plan=plan)
 
 
 def _patch_size(params) -> float:
     """Diagonal of the control points' box. A Bezier patch stays inside its
-    control points' hull, so this bounds the patch (plain numpy: works
-    while being traced)."""
-    pts = np.concatenate(
-        [
-            np.asarray(params[k], dtype=float).reshape(-1, 3)
-            for k in params
-            if k.startswith(("curve_", "guide_"))
-        ]
-    )
+    control points' hull, so this bounds the patch."""
+    arrays = list(params["curves"]) + list(params.get("guides") or [])
+    pts = np.concatenate([np.asarray(c, dtype=float).reshape(-1, 3) for c in arrays])
     return float(np.linalg.norm(pts.max(0) - pts.min(0)))
 
 
@@ -185,16 +202,28 @@ def signed_distance(p, patch: Patch, reach, flip=False):
 
 
 # ------------------------------------------------------------ sdm-core hook
-_KEYS = [f"{k}_{i}" for i in range(1, 5) for k in ("curve", "normal", "tangent", "weight")] + [
-    f"guide_{k}" for k in range(1, N_GUIDES + 1)
-]
+_STRUCTURAL = ("conditions", "vectors", "weights", "reach", "flip", "fold")
 
 
-def _prim(p, reach=None, flip=False, fold=None, **kw):
-    params = {k: v for k, v in kw.items() if v is not None}
-    unknown = set(params) - set(_KEYS)
-    if unknown:
-        raise ValueError(f"boundary_blend: unknown parameters {sorted(unknown)}")
+def _prim(
+    p,
+    curves,
+    conditions=None,
+    vectors=None,
+    weights=None,
+    guides=None,
+    reach=None,
+    flip=False,
+    fold=None,
+):
+    """Signed distance to a boundary-blend skin, from literal params."""
+    params = {
+        "curves": curves,
+        "conditions": conditions,
+        "vectors": vectors,
+        "weights": weights,
+        "guides": guides,
+    }
     patch = make_patch(params)
     if reach is None:
         reach = 2.0 * _patch_size(params)
@@ -204,12 +233,7 @@ def _prim(p, reach=None, flip=False, fold=None, **kw):
         # skin meets those planes square, as a symmetry plane requires.
         f = jnp.asarray(fold) > 0.5
         p = jnp.where(f, jnp.abs(jnp.asarray(p)), p)
-    return signed_distance(p, patch, reach, flip=float(np.asarray(flip)) > 0.5)
-
-
-_GEOMETRY = tuple(f"curve_{i}" for i in range(1, 5)) + tuple(
-    f"guide_{k}" for k in range(1, N_GUIDES + 1)
-)
+    return signed_distance(p, patch, reach, flip=bool(flip))
 
 
 def compile_boundary_blend(node, binding=None):
@@ -218,46 +242,41 @@ def compile_boundary_blend(node, binding=None):
     The plan (topology and validity checks) is made ONCE here, from the
     nominal parameter values; every call then rebuilds the geometry from the
     live values in JAX, so curve and guide control points written as
-    ``$ref`` / expressions are differentiable. The other params (conditions,
-    weights, reach, flip, fold) are structural and must be literal numbers.
+    ``$ref`` / expressions are differentiable. Everything else (conditions,
+    vectors, weights, reach, flip, fold) is structural and must be literal.
     """
     from software_defined_matter.dsl.resolve import resolve_param_value
 
     raw = dict(node.get("params") or {})
-    reach, flip, fold = raw.pop("reach", None), raw.pop("flip", False), raw.pop("fold", None)
-    unknown = set(raw) - set(_KEYS)
-    if unknown:
-        raise ValueError(f"boundary_blend: unknown parameters {sorted(unknown)}")
-    struct = {k: v for k, v in raw.items() if k not in _GEOMETRY}
-    if any(isinstance(v, dict) for v in struct.values()) or any(
-        isinstance(v, dict) for v in (reach, fold) if v is not None
-    ):
+    if any(_has_ref(raw.get(k)) for k in _STRUCTURAL):
         raise ValueError(
             "boundary_blend: only curve and guide control points may be named parameters"
         )
-    geo = {k: v for k, v in raw.items() if k in _GEOMETRY}
+    struct = {k: raw.get(k) for k in ("conditions", "vectors", "weights")}
+    reach, flip, fold = raw.get("reach"), bool(raw.get("flip", False)), raw.get("fold")
+    geo = {"curves": list(raw["curves"]), "guides": list(raw.get("guides") or [])}
+
+    def resolved(free_vec):
+        return {k: [resolve_param_value(c, binding, free_vec) for c in v] for k, v in geo.items()}
+
     if binding is None:
-        nominal = {k: np.asarray(v, float) for k, v in geo.items()}
-        free0 = None
+        nominal = {k: [np.asarray(c, float) for c in v] for k, v in geo.items()}
     else:
-        free0 = binding.initial_free_vector()
-        nominal = {k: np.asarray(resolve_param_value(v, binding, free0)) for k, v in geo.items()}
+        nominal = {
+            k: [np.asarray(c) for c in v]
+            for k, v in resolved(binding.initial_free_vector()).items()
+        }
     patch0 = make_patch(nominal | struct)
     plan = patch0.plan
     if reach is None:
         reach = 2.0 * _patch_size(nominal)
-    b_flip = bool(flip) if not isinstance(flip, (int, float)) else float(flip) > 0.5
 
     def fn(p, free_vec):
-        if binding is None:
-            patch = patch0
-        else:
-            live = {k: resolve_param_value(v, binding, free_vec) for k, v in geo.items()}
-            patch = make_patch(live | struct, plan=plan)
+        patch = patch0 if binding is None else make_patch(resolved(free_vec) | struct, plan=plan)
         q = p
         if fold is not None:
             q = jnp.where(jnp.asarray(fold) > 0.5, jnp.abs(p), p)
-        return signed_distance(q, patch, reach, flip=b_flip)
+        return signed_distance(q, patch, reach, flip=flip)
 
     return fn
 
@@ -270,7 +289,8 @@ def boundary_blend_params(
     curves:     3 or 4 lists of Bezier control points, head to tail.
     conditions: one per curve (same count): "free", ("normal", vec),
                 ("tangent", vec), optionally with a weight: ("normal", vec, 1.3).
-                Stored in the .sdm as `normal_i` / `tangent_i` / `weight_i`.
+                Stored in the .sdm as three lists, one entry per curve:
+                ``conditions`` (names), ``vectors`` and ``weights``.
     reach:      how far (mm) the skin carries on past its edges; default
                 twice the patch's size. Make it cover the solid being cut.
     flip:       swap which side is negative.
@@ -281,14 +301,15 @@ def boundary_blend_params(
                 far-off (inaccurate) region compete with the real one.
     guides:     (keyword) curves across the patch in either direction, each
                 from one boundary to the one facing it; the two families must
-                cross each other, once each. Up to 12.
+                cross each other, once each. Any number.
     check:      (keyword) build the surface now and refuse it if it folds
                 (see `check.quality_report`).
     """
     curves = [_points(c) for c in curves]
     if len(curves) not in (3, 4):
         raise ValueError("boundary blend needs 3 or 4 curves")
-    literal = not any(_has_ref(c) for c in curves) and not any(_has_ref(g) for g in guides or [])
+    guides = [_points(g) for g in guides or []]
+    literal = not any(_has_ref(c) for c in curves) and not any(_has_ref(g) for g in guides)
     if literal:
         _check_chain([np.asarray(c, float) for c in curves])
     conditions = list(conditions) if conditions is not None else ["free"] * len(curves)
@@ -296,23 +317,23 @@ def boundary_blend_params(
         raise ValueError(
             f"{len(curves)} curves but {len(conditions)} conditions: give one per curve"
         )
-    params = {}
-    for i, c in enumerate(curves, start=1):
-        params[f"curve_{i}"] = c
+    names, vectors, weights = [], [], []
     for i, cond in enumerate(conditions, start=1):
         if isinstance(cond, str):
             cond = (cond,)
         if cond[0] not in MODES:
             raise ValueError(f"curve {i}: condition {cond[0]!r} not in {MODES}")
-        if cond[0] != "free":
-            params[f"{cond[0]}_{i}"] = [float(x) for x in cond[1]]
-        if len(cond) > 2:
-            params[f"weight_{i}"] = float(cond[2])
-    guides = list(guides or [])
-    if len(guides) > N_GUIDES:
-        raise ValueError(f"at most {N_GUIDES} guides")
-    for k, g in enumerate(guides, start=1):
-        params[f"guide_{k}"] = _points(g)
+        names.append(cond[0])
+        vectors.append([float(x) for x in cond[1]] if cond[0] != "free" else [0.0, 0.0, 0.0])
+        weights.append(float(cond[2]) if len(cond) > 2 else 1.0)
+    params: dict = {"curves": curves}
+    if any(m != "free" for m in names):
+        params["conditions"] = names
+        params["vectors"] = vectors
+    if any(w != 1.0 for w in weights):
+        params["weights"] = weights
+    if guides:
+        params["guides"] = guides
     if reach is not None:
         params["reach"] = float(reach)
     if flip:
