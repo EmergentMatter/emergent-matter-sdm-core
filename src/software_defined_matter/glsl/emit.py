@@ -33,8 +33,10 @@ from typing import Any, NamedTuple
 
 import numpy as np
 
+from software_defined_matter import wire
 from software_defined_matter.model import Part, SDFTree
 from software_defined_matter.sdf.bbox import BBox, infer_sdf_bbox
+from software_defined_matter.sdf.sdf_edge_blends import is_blended
 
 # The 2-D curve primitives, which have no PrimSpec because they are not lib
 # functions: each evaluates as the exact polygon SDF of its own sampled
@@ -358,6 +360,158 @@ class GLSLEmission:
 # ---------------------------------------------------------------------------
 # Emitter
 # ---------------------------------------------------------------------------
+
+
+#: Edge-treatment params (sdf_edge_blends). A primitive carrying them is
+#: emitted inline by ``_emit_blended_primitive``, never through its lib.glsl
+#: function, so they are not part of any lib.glsl signature.
+BLEND_PARAMS = ("blend", "blend_r")
+
+
+def _glsl_blend_faces(ds: list[str], blend: str, r_expr: str) -> list[str]:
+    """GLSL lines intersecting ONE primitive's face distances ``ds`` with an
+    edge treatment, ending in ``return``. Mirrors
+    ``sdf_edge_blends.op_blend_faces`` term for term."""
+    lines = [f"float R = {r_expr};"]
+    lines += [f"float e{i} = {d};" for i, d in enumerate(ds)]
+    es = [f"e{i}" for i in range(len(ds))]
+
+    def fold(fn: str, xs: list[str]) -> str:
+        out = xs[0]
+        for x in xs[1:]:
+            out = f"{fn}({out}, {x})"
+        return out
+
+    if blend == "round":
+        lines += [f"float t{i} = max({e} + R, 0.0);" for i, e in enumerate(es)]
+        ss = " + ".join(f"t{i} * t{i}" for i in range(len(es)))
+        lines.append(f"return min(-R, {fold('max', es)}) + sqrt({ss} + 1e-30);")
+    elif blend == "chamfer":
+        pairs = [(a, b) for k, a in enumerate(es) for b in es[k + 1 :]]
+        ch = [f"(({a} + {b} + R) * 0.7071067811865476)" for a, b in pairs]
+        lines.append(f"return {fold('max', [fold('max', es)] + ch)};")
+    else:
+        raise ValueError(f"unknown blend {blend!r}")
+    return lines
+
+
+def _glsl_rolling_ball(
+    fn: str, child_fns: list[str], op: str, blend: str, r_expr: str, dim: int
+) -> list[tuple[str, list[str]]]:
+    """(signature, body) for the functions of a blended ``op`` over
+    ``child_fns``: the rolling-ball round or chamfer of
+    ``sdf_edge_blends._closing``, step for step. Gradients are central
+    differences; the field is a preview of the compiled one, not a bit-copy.
+
+    An intersection is the union of the complements, so every child is read
+    through a sign (``s_k``) and the result is negated back.
+    """
+    vt = f"vec{dim}"
+    n = len(child_fns)
+    if op == "union":
+        signs, outer = [1.0] * n, 1.0
+    elif op == "intersect":
+        signs, outer = [-1.0] * n, -1.0
+    else:  # subtract: fields[0] with the rest cut out
+        signs, outer = [-1.0] + [1.0] * (n - 1), -1.0
+
+    def term(k: int, x: str) -> str:
+        return f"{child_fns[k]}({x})" if signs[k] > 0 else f"(-{child_fns[k]}({x}))"
+
+    v_body = [f"if (k == {k}) return {term(k, 'x')};" for k in range(n - 1)]
+    v_body.append(f"return {term(n - 1, 'x')};")
+    axes = ["vec3(H, 0.0, 0.0)", "vec3(0.0, H, 0.0)", "vec3(0.0, 0.0, H)"]
+    if dim == 2:
+        axes = ["vec2(H, 0.0)", "vec2(0.0, H)"]
+    g_terms = [f"{fn}_v(k, x + {e}) - {fn}_v(k, x - {e})" for e in axes]
+    g_body = ["const float H = 5e-3;", f"return {vt}({', '.join(g_terms)}) / (2.0 * H);"]
+    lo_body = [f"float m = {term(0, 'x')};"]
+    lo_body += [f"m = min(m, {term(k, 'x')});" for k in range(1, n)]
+    lo_body.append("return m;")
+
+    def cross2(a: str, b: str) -> str:
+        if dim == 3:
+            return f"dot(cross({a}, {b}), cross({a}, {b}))"
+        return f"(({a}.x * {b}.y - {a}.y * {b}.x) * ({a}.x * {b}.y - {a}.y * {b}.x))"
+
+    # float32 differences: a looser tolerance than the kernel's 1e-4
+    body = [f"float R = {r_expr};", "const float TOL = 1e-3;", "const float BIG = 1e30;"]
+    body += [f"float c{k} = {term(k, 'p')};" for k in range(n)]
+    body += [
+        "int i0 = 0; int i1 = 1; float a = c0; float b = c1;",
+        "if (b < a) { i0 = 1; i1 = 0; a = c1; b = c0; }",
+    ]
+    for k in range(2, n):
+        body.append(
+            f"if (c{k} < a) {{ i1 = i0; b = a; i0 = {k}; a = c{k}; }}"
+            f" else if (c{k} < b) {{ i1 = {k}; b = c{k}; }}"
+        )
+    body += [
+        "float ua = a - R; float ub = b - R;",
+        # inside E: the ball fits, so the field is the plain union there
+        f"if (ua >= 0.0) return {outer} * a;",
+        f"{vt} ga = {fn}_g(i0, p); {vt} gb = {fn}_g(i1, p);",
+        "float d_face = BIG;",
+        f"if ({fn}_lo(p - ua * ga) >= R - TOL) d_face = -ua;",
+        f"if (ub < 0.0 && {fn}_lo(p - ub * gb) >= R - TOL) d_face = min(d_face, -ub);",
+        # the spine: projected Newton onto {f_i0 = r, f_i1 = r}
+        f"{vt} C = p;",
+        "for (int it = 0; it < 8; ++it) {",
+        f"    {vt} na = {fn}_g(i0, C); {vt} nb = {fn}_g(i1, C);",
+        f"    if ({cross2('na', 'nb')} <= 1e-6) break;",
+        f"    float g0 = {fn}_v(i0, C) - R; float g1 = {fn}_v(i1, C) - R;",
+        "    float m00 = dot(na, na); float m01 = dot(na, nb); float m11 = dot(nb, nb);",
+        "    float det = m00 * m11 - m01 * m01;",
+        "    float l0 = (m11 * g0 - m01 * g1) / det; float l1 = (m00 * g1 - m01 * g0) / det;",
+        f"    {vt} C1 = C - (l0 * na + l1 * nb);",
+    ]
+    if dim == 3:
+        body += ["    vec3 t = normalize(cross(na, nb));", "    C1 += t * dot(t, p - C1);"]
+    body += [
+        "    C = C1;",
+        "}",
+        f"{vt} na_c = normalize({fn}_g(i0, C)); {vt} nb_c = normalize({fn}_g(i1, C));",
+        f"bool on_spine = {cross2('na_c', 'nb_c')} > 1e-6"
+        f" && abs({fn}_v(i0, C) - R) < TOL && abs({fn}_v(i1, C) - R) < TOL"
+        f" && {fn}_lo(C) >= R - TOL;",
+        "float d_sp = on_spine ? length(p - C) : BIG;",
+        "float d_E = min(d_face, d_sp);",
+    ]
+    if blend == "round":
+        # no candidate: an outside corner; straight away from both is the way out
+        body += ["if (d_E >= BIG) d_E = max(-ua, -ub);", f"return {outer} * (R - d_E);"]
+    else:
+        body += [
+            f"if (!(on_spine && d_sp <= d_face)) return {outer} * a;",
+            # the flat between the contact lines C - R n0 and C - R n1
+            f"{vt} ta = C - R * na_c; {vt} tb = C - R * nb_c;",
+            f"{vt} e = tb - ta; float L = length(e); {vt} eh = e / L;",
+        ]
+        if dim == 3:
+            body += [
+                "vec3 T = normalize(cross(na_c, nb_c));",
+                "vec3 m = normalize(cross(eh, T));",
+            ]
+        else:
+            body.append("vec2 m = vec2(-eh.y, eh.x);")
+        body += [
+            "if (dot(m, C - ta) < 0.0) m = -m;",
+            "float s = dot(p - ta, m);",
+            "float lam = dot(p - ta, eh) / L;",
+            f"{vt} wa = p - ta; {vt} wb = p - tb;",
+        ]
+        if dim == 3:
+            body += ["wa -= T * dot(wa, T);", "wb -= T * dot(wb, T);"]
+        body += [
+            "float outside = (lam >= 0.0 && lam <= 1.0) ? s : min(length(wa), length(wb));",
+            f"return {outer} * (s < 0.0 ? min(a, s) : outside);",
+        ]
+    return [
+        (f"float {fn}_v(int k, {vt} x)", v_body),
+        (f"{vt} {fn}_g(int k, {vt} x)", g_body),
+        (f"float {fn}_lo({vt} x)", lo_body),
+        (f"float {fn}({vt} p)", body),
+    ]
 
 
 class _GLSLEmitter:
@@ -691,6 +845,11 @@ class _GLSLEmitter:
                 raise ValueError(f"Primitive {kind!r} is 2-D but used in a {dim}-D context.")
             return self._emit_polygon_2d(self._curve_to_polygon(node))
         if kind not in _PRIM_SPECS:
+            if kind in wire.PRIMITIVES:
+                raise ValueError(
+                    f"Primitive {kind!r} has no GLSL routine: bake it to a raster_field "
+                    "for viewing (see sdf.bake.bake_raster_field)"
+                )
             raise ValueError(f"Unknown primitive {kind!r}")
         spec = _PRIM_SPECS[kind]
         if spec.dim != dim:
@@ -702,6 +861,11 @@ class _GLSLEmitter:
             return self._emit_polygon_2d(node)
 
         raw_kwargs = node.get("params") or {}
+        # which primitives take `blend` is wire.py's call, not this file's
+        wire_spec = wire.PRIMITIVES.get(kind)
+        takes_blend = wire_spec is not None and wire_spec.get_param("blend") is not None
+        if takes_blend and raw_kwargs.get("blend", "sharp") != "sharp":
+            return self._emit_blended_primitive(node)
         arg_exprs: list[str] = []
         for arg_name, arg_type in spec.args:
             if arg_name not in raw_kwargs:
@@ -714,6 +878,29 @@ class _GLSLEmitter:
         fn = self._fn_name(dim)
         call = f"{_lib_fn(kind)}(p, {', '.join(arg_exprs)})"
         self._emit_function(f"float {fn}(vec{dim} p)", [f"return {call};"])
+        return fn
+
+    def _emit_blended_primitive(self, node: dict[str, Any]) -> str:
+        """``box`` / ``capped_cylinder`` with an edge treatment, inline
+        (mirrors sdf_shapes + sdf_edge_blends.op_blend_faces)."""
+        kw = node.get("params") or {}
+        r_expr = self._emit_value(kw.get("blend_r", 0.0), "float")
+        if node["kind"] not in ("box", "capped_cylinder"):
+            raise ValueError(
+                f"Primitive {node['kind']!r} takes `blend` but has no GLSL edge treatment"
+            )
+        if node["kind"] == "box":
+            b_expr = self._emit_value(kw["b"], "vec3")
+            head = [f"vec3 q = abs(p) - {b_expr};"]
+            faces = ["q.x", "q.y", "q.z"]
+        else:
+            h_expr = self._emit_value(kw["h"], "float")
+            rad_expr = self._emit_value(kw["r"], "float")
+            head = [f"vec2 q = vec2(length(p.xy) - {rad_expr}, abs(p.z) - {h_expr});"]
+            faces = ["q.x", "q.y"]
+        body = head + _glsl_blend_faces(faces, kw["blend"], r_expr)
+        fn = self._fn_name(3)
+        self._emit_function(f"float {fn}(vec3 p)", body)
         return fn
 
     def _emit_raster_field(self, node: dict[str, Any]) -> str:
@@ -1314,9 +1501,18 @@ class _GLSLEmitter:
         child_fns = [self.emit_node(c, dim=dim) for c in children]
         kwargs = node.get("params") or {}
 
-        # Hard CSG: may be promoted to smooth via metadata flag.
+        blend = kwargs.get("blend", "sharp")
+        # Hard CSG: may be promoted to smooth via metadata flag, unless the
+        # op names its own edge treatment (which wins, as in compile.py).
+        if op_name in _HARD_BINARY_OPS and blend != "sharp" and len(child_fns) > 1:
+            r_expr = self._emit_value(kwargs.get("blend_r", 0.0), "float")
+            fn = self._fn_name(dim)
+            for sig, fbody in _glsl_rolling_ball(fn, child_fns, op_name, blend, r_expr, dim):
+                self._emit_function(sig, fbody)
+            return fn
         if op_name in _HARD_BINARY_OPS:
-            if self.smooth_csg:
+            # an explicit edge treatment, "sharp" included, wins over smooth_csg
+            if self.smooth_csg and "blend" not in kwargs:
                 smooth_name = _HARD_TO_SMOOTH[op_name]
                 k_expr = _float_literal(self.smooth_k)
                 body = _csg_fold(child_fns, f"op_{smooth_name}", extra_arg=k_expr)
@@ -2345,6 +2541,7 @@ def _expand_components(tree: SDFTree, labels: list[str]) -> list[tuple[SDFTree, 
             isinstance(node, dict)
             and node.get("type") == "op"
             and node.get("op") == "union"
+            and not is_blended(node)
             and node.get("children")
             and len(out) + len(node["children"]) + (len(children) - i - 1) <= _MAX_COMPONENTS
         ):
@@ -2391,7 +2588,8 @@ def _segmentable(tree: SDFTree, *, smooth_csg: bool) -> bool:
 
     `smooth_csg` disqualifies it: a smooth union BLENDS its children, so no
     point belongs to exactly one of them and "which component owns p" has no
-    answer to give.
+    answer to give. A union with a ``blend`` edge treatment is out for the
+    same reason: its fillet belongs to no one child.
 
     Args:
         tree: The root node.
@@ -2404,6 +2602,7 @@ def _segmentable(tree: SDFTree, *, smooth_csg: bool) -> bool:
         isinstance(tree, dict)
         and tree.get("type") == "op"
         and tree.get("op") == "union"
+        and not is_blended(tree)
         and not smooth_csg
         and len(tree.get("children", [])) > 1
     )

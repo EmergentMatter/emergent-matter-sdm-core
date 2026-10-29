@@ -95,6 +95,23 @@ def _value_schema(pspec: wire.ParamSpec) -> dict[str, Any]:
         # multiple_of (bezier_2d's 3K control points) has no native JSON
         # Schema array-length keyword; sdf/validate.py enforces it.
         return out
+    if shape == "point_list_list":
+        inner = _value_schema(
+            wire.ParamSpec(
+                pspec.name,
+                False,
+                "point_list",
+                point_dim=pspec.point_dim,
+                min_points=pspec.min_points,
+                since=pspec.since,
+            )
+        )
+        return {"type": "array", "items": inner}
+    if shape == "string_list":
+        item = (
+            {"enum": list(pspec.choices)} if pspec.choices else {"type": "string", "minLength": 1}
+        )
+        return {"type": "array", "items": item}
     if shape == "string":
         return (
             {"enum": list(pspec.choices)} if pspec.choices else {"type": "string", "minLength": 1}

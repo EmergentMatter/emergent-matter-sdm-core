@@ -42,12 +42,21 @@ def sphere(p, r):
     return _length(p) - r
 
 
-def box(p, b):
-    """Exact SDF for an axis-aligned box with half-extents b (array-like [bx,by,bz])."""
+def box(p, b, blend="sharp", blend_r=0.0):
+    """Exact SDF for an axis-aligned box with half-extents b (array-like [bx,by,bz]).
+
+    ``blend`` treats all twelve edges (sdf_edge_blends): ``"round"`` rounds
+    them to radius ``blend_r`` inside the same envelope (the same solid as
+    ``round_box``), ``"chamfer"`` chamfers them with legs ``blend_r``.
+    """
     p = jnp.asarray(p)
     b = jnp.asarray(b)
     _check_axis_vector("box.b", b, p)
     q = jnp.abs(p) - b
+    if blend != "sharp":
+        from software_defined_matter.sdf.sdf_edge_blends import op_blend_faces
+
+        return op_blend_faces(q, blend, blend_r)
     return _length(jnp.maximum(q, 0.0)) + jnp.minimum(jnp.max(q, axis=-1), 0.0)
 
 
@@ -339,10 +348,37 @@ def capsule(p, a, b, r):
     return _length(pa - ba * h[..., None]) - r
 
 
-def capped_cylinder(p, h, r):
-    """Exact SDF for a capped cylinder of half-height h and radius r."""
+def capped_cylinder(p, h, r, blend="sharp", blend_r=0.0):
+    """Exact SDF for a capped cylinder of half-height h and radius r.
+
+    ``blend`` treats the two rim edges (sdf_edge_blends): rounded to radius
+    ``blend_r`` or chamfered with legs ``blend_r``, inside the same envelope.
+    """
     d = jnp.stack([jnp.abs(_length(p[..., :2])) - r, jnp.abs(p[..., 2]) - h], axis=-1)
+    if blend != "sharp":
+        from software_defined_matter.sdf.sdf_edge_blends import op_blend_faces
+
+        return op_blend_faces(d, blend, blend_r)
     return jnp.minimum(jnp.max(d, axis=-1), 0.0) + _length(jnp.maximum(d, 0.0))
+
+
+def boundary_blend(
+    p,
+    curves,
+    conditions=None,
+    vectors=None,
+    weights=None,
+    guides=None,
+    reach=None,
+    flip=False,
+    fold=None,
+):
+    """Signed distance to a boundary-blend skin (sdf_boundary_blend), from
+    literal params. The compiler builds the surface once instead, and lets
+    its control points be parameters (``compile_boundary_blend``)."""
+    from software_defined_matter.sdf.sdf_boundary_blend import _prim
+
+    return _prim(p, curves, conditions, vectors, weights, guides, reach, flip, fold)
 
 
 def rounded_cylinder(p, ra, rb, h):

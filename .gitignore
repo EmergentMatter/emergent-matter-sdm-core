@@ -21,6 +21,8 @@ src/**/*.egg-info/**
 
 # Generated mesh exports from examples/export_example.py
 examples/exports/
+# Output of examples/boundary_blend_differentiable.py
+examples/boundary_blend_demo_out/
 
 # Local graphify tool artifacts (never part of the repo)
 .graphify/

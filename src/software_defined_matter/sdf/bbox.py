@@ -6,6 +6,8 @@ import math
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any
 
+from software_defined_matter import wire
+
 if TYPE_CHECKING:
     from software_defined_matter.model import MaterialRegion, Part, SDFTree
 
@@ -307,8 +309,7 @@ def _infer_primitive_bbox(node: dict[str, Any], intervals: dict[str, Interval]) 
 
     # Explicitly unbounded (`plane`) or only valid wrapped in a 2d_to_3d
     # node (2D primitives). Neither has a meaningful 3D bbox on its own.
-    if kind in (
-        "plane",
+    if kind in wire.UNBOUNDED_PRIMITIVES or kind in (
         "circle_2d",
         "box_2d",
         "rounded_box_2d",

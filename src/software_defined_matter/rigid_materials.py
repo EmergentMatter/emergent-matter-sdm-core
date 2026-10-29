@@ -17,6 +17,7 @@ from software_defined_matter.kinematics import compile_kinematics, resolve_regio
 from software_defined_matter.model import Part
 from software_defined_matter.motion_bounds import _Intervals, _padded
 from software_defined_matter.sdf.bbox import BBoxInferenceError
+from software_defined_matter.sdf.sdf_edge_blends import is_blended
 
 __all__ = ["RigidMaterialRefusalError", "rigid_material_part"]
 
@@ -30,7 +31,8 @@ def _key(tree: Any) -> str:
 
 
 def _union_members(tree: dict[str, Any]) -> list[dict[str, Any]]:
-    if tree.get("type") == "op" and tree.get("op") == "union":
+    # a blended union is not a min of its members: its fillet belongs to none
+    if tree.get("type") == "op" and tree.get("op") == "union" and not is_blended(tree):
         return [member for child in tree["children"] for member in _union_members(child)]
     return [tree]
 
