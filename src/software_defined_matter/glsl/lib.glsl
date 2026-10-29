@@ -367,14 +367,18 @@ float sdf_torus(vec3 p, vec2 t) {
 }
 
 float sdf_capped_torus(vec3 p, vec2 sc, float ra, float rb) {
-    // sc = [sin(angle), cos(angle)]
+    // sc = [sin, cos] of the half-aperture from +Y; only its direction counts.
+    // The guard matches _unit in JAX: normalize(vec2(0)) is undefined.
+    // Distance to the nearest centreline point rather than IQ's expanded
+    // sqrt, which goes negative on the centreline. Mirrors
+    // sdf_shapes.capped_torus.
+    vec2 u = sc / max(length(sc), 1e-30);
     float px = abs(p.x);
-    float py = p.y;
-    float pz = p.z;
-    vec2 pxy = vec2(px, py);
-    float k = (sc.y * px > sc.x * py) ? dot(pxy, sc) : length(pxy);
-    vec3 p3 = vec3(px, py, pz);
-    return sqrt(dot(p3, p3) + ra * ra - 2.0 * ra * k) - rb;
+    vec2 pxy = vec2(px, p.y);
+    float d = (u.y * px > u.x * p.y)
+        ? length(vec3(pxy - ra * u, p.z))
+        : length(vec2(length(pxy) - ra, p.z));
+    return d - rb;
 }
 
 float sdf_helix(vec3 p, float major_r, float pitch, float r, float n_turns,
@@ -495,11 +499,13 @@ float sdf_capped_cone(vec3 p, float h, float r1, float r2) {
 }
 
 float sdf_solid_angle(vec3 p, vec2 c, float ra) {
-    // c = [sin(angle), cos(angle)]
+    // c = [sin, cos] of the half-angle from +Z; only its direction counts.
+    // Guarded as in sdf_capped_torus. Mirrors sdf_shapes.solid_angle.
+    vec2 u = c / max(length(c), 1e-30);
     vec2 q = vec2(length(p.xy), p.z);
     float l = length(q) - ra;
-    float m = length(q - c * clamp(dot(q, c), 0.0, ra));
-    return max(l, m * sign(c.y * q.x - c.x * q.y));
+    float m = length(q - u * clamp(dot(q, u), 0.0, ra));
+    return max(l, m * sign(u.y * q.x - u.x * q.y));
 }
 
 float sdf_cut_sphere(vec3 p, float r, float h) {

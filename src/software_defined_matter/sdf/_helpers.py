@@ -63,6 +63,19 @@ def _dot2(v):
     return jnp.sum(v * v, axis=-1)
 
 
+def _unit(v):
+    """``v / |v|`` along the last axis, for a parameter whose direction is its
+    only meaning (an angle given as ``[sin, cos]``, a plane normal).
+
+    A zero vector has no direction. It stays zero, where a plain division
+    would return NaN and give a NaN gradient. GLSL mirrors this as
+    ``v / max(length(v), 1e-30)``, which also returns zero for a zero vector.
+    """
+    n2 = jnp.sum(v * v, axis=-1, keepdims=True)
+    safe = jnp.where(n2 > 0.0, n2, 1.0)
+    return jnp.where(n2 > 0.0, v * jax.lax.rsqrt(safe), 0.0)
+
+
 def _clamp(x, lo, hi):
     return jnp.clip(x, lo, hi)
 
