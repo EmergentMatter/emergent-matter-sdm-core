@@ -28,6 +28,7 @@ from software_defined_matter.sdf._helpers import (
     _dot2,
     _length,
     _sign,
+    _unit,
 )
 from software_defined_matter.sdf.sdf_ops import op_subtract
 
@@ -88,15 +89,28 @@ def torus(p, t):
 
 
 def capped_torus(p, sc, ra, rb):
-    """Exact SDF for a capped torus. sc = [sin(angle), cos(angle)]."""
-    sc = jnp.asarray(sc)
+    """Exact SDF for a capped torus: a tube of radius ``rb`` around an arc of
+    radius ``ra`` in the XY plane, symmetric about +Y.
+
+    ``sc`` is the half-aperture angle as ``[sin, cos]``, measured from +Y. Only
+    its direction is used. It is normalised here because it is a free ``vec2``
+    param, and an optimiser moves the two components independently: a vector
+    off the unit circle would otherwise move the surface and over-report the
+    distance.
+    """
+    sc = _unit(jnp.asarray(sc))
     px = jnp.abs(p[..., 0])
     py = p[..., 1]
     pz = p[..., 2]
     pxy = jnp.stack([px, py], axis=-1)
-    k = jnp.where(sc[1] * px > sc[0] * py, jnp.sum(pxy * sc, axis=-1), _length(pxy))
-    p3 = jnp.stack([px, py, pz], axis=-1)
-    return jnp.sqrt(_dot2(p3) + ra**2 - 2.0 * ra * k) - rb
+    # Distance to the nearest point of the centreline arc: the arc's end
+    # ``ra * sc`` once past the cap angle, else the foot on the full circle.
+    # IQ expands both into one sqrt(|p|^2 + ra^2 - 2*ra*k). That form subtracts
+    # two nearly equal numbers on the centreline, so float32 gives a negative
+    # argument there and the value is NaN.
+    to_end = _length(jnp.stack([px - ra * sc[0], py - ra * sc[1], pz], axis=-1))
+    to_circle = _length(jnp.stack([_length(pxy) - ra, pz], axis=-1))
+    return jnp.where(sc[1] * px > sc[0] * py, to_end, to_circle) - rb
 
 
 def helix(p, major_r, pitch, r, n_turns, phase=0.0, handedness=1.0):
@@ -355,8 +369,13 @@ def capped_cone(p, h, r1, r2):
 
 
 def solid_angle(p, c, ra):
-    """Exact SDF for a solid angle. c = [sin(angle), cos(angle)]."""
-    c = jnp.asarray(c)
+    """Exact SDF for a solid angle: a spherical cone of radius ``ra`` about +Z.
+
+    ``c`` is the half-angle as ``[sin, cos]``, measured from +Z. Only its
+    direction is used; it is normalised for the same reason as in
+    :func:`capped_torus`.
+    """
+    c = _unit(jnp.asarray(c))
     q = jnp.stack([_length(p[..., :2]), p[..., 2]], axis=-1)
     l_dist = _length(q) - ra
     m = _length(q - c * _clamp(jnp.sum(q * c, axis=-1), 0.0, ra)[..., None])
