@@ -238,3 +238,12 @@ def quality_report(patch: Patch, reach, n=33):
         "worst_landing_deg": float(np.nanmax(list(corners.values()) or [0.0])),
         "worst_crossing_gap_mm": float(max([g for _, g in patch.crossings] or [0.0])),
     }
+
+
+__all__ = [
+    "boundary_error",
+    "corner_report",
+    "guide_report",
+    "quality_report",
+    "side_report",
+]

@@ -426,25 +426,28 @@ def _compile_op(
 
     blend = kwargs.get("blend", "sharp")
     if op_name in _BINARY_OPS and blend != "sharp":
-        # An explicit edge treatment wins over the part-wide smooth promotion.
+        # The rolling-ball edge treatment (sdf_edge_blends).
         from software_defined_matter.sdf import sdf_edge_blends as eb
 
         combine_n = {
-            "union": eb.blend_union,
-            "intersect": eb.blend_intersect,
-            "subtract": eb.blend_subtract,
+            "union": eb.op_blend_union,
+            "intersect": eb.op_blend_intersect,
+            "subtract": eb.op_blend_subtract,
         }[op_name]
         r_raw = kwargs.get("blend_r", 0.0)
 
         def fn(p: jnp.ndarray, free_vec: jnp.ndarray) -> jnp.ndarray:
             r = resolve_param_value(r_raw, binding, free_vec)
-            stacked = jnp.stack([c(p, free_vec) for c in children], axis=-1)
-            return combine_n(stacked, blend, r)
+            flat = jnp.reshape(p, (-1, p.shape[-1]))
+            fields = [lambda x, c=c: c(x, free_vec) for c in children]
+            return jnp.reshape(combine_n(fields, blend, r, flat), p.shape[:-1])
 
         return fn
 
     if op_name in _BINARY_OPS:
-        if b_smooth_csg:
+        # An explicit edge treatment, "sharp" included, wins over the
+        # part-wide smooth promotion.
+        if b_smooth_csg and "blend" not in kwargs:
             smooth_name = _HARD_TO_SMOOTH[op_name]
             combine_smooth = _SMOOTH_BINARY_OPS[smooth_name]
             d_smooth_k_arr = jnp.asarray(d_smooth_k)

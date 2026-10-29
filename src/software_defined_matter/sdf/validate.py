@@ -419,6 +419,22 @@ def _validate_params(
                 f"{path}.params.{pspec.name}",
                 expected_dim,
             )
+    _check_blend_r(raw, path)
+
+
+def _check_blend_r(raw: dict[str, Any], path: str) -> None:
+    """An edge treatment needs a size: ``blend_r`` > 0 whenever ``blend`` is
+    not ``sharp`` (a missing or zero size would quietly give a sharp edge),
+    and never negative. A ``$ref`` size is checked where it resolves."""
+    if "blend_r" not in raw and "blend" not in raw:
+        return
+    r = raw.get("blend_r")
+    if raw.get("blend", "sharp") != "sharp" and r is None:
+        raise SemanticValidationError(f"{path}.params: blend={raw['blend']!r} needs a blend_r > 0")
+    if isinstance(r, bool) or not isinstance(r, (int, float)):
+        return
+    if r < 0 or (r == 0 and raw.get("blend", "sharp") != "sharp"):
+        raise SemanticValidationError(f"{path}.params.blend_r: expected > 0, got {r!r}")
 
 
 def _validate_child(

@@ -329,6 +329,8 @@ class NodeSpec:
 #: Edge treatments a boolean (and `box`, `capped_cylinder`) can be given; see
 #: sdf/sdf_edge_blends.py. Mirrored there as ``BLENDS``.
 _BLENDS = ("sharp", "round", "chamfer")
+#: The edge treatments, for code outside this module (sdf_edge_blends, emit).
+BLENDS = _BLENDS
 
 PRIMITIVES: dict[str, NodeSpec] = {
     "sphere": NodeSpec("sphere", "primitive", dim=3, params=(
@@ -1049,6 +1051,7 @@ DOCUMENT_FIELDS: dict[str, tuple[FieldSpec, ...]] = {
 
 
 __all__ = [
+    "BLENDS",
     "CONSTRAINT_FIELDS",
     "CONSTRAINT_OPS",
     "PORT_FIELDS",

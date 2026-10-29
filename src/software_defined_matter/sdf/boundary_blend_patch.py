@@ -748,3 +748,11 @@ class Patch:
         vs = jnp.linspace(0.0, 1.0, n_v)
         f = jax.vmap(jax.vmap(self.S, in_axes=(None, 0)), in_axes=(0, None))
         return f(us, vs)
+
+
+__all__ = [
+    "GAP_TOL",
+    "MODES",
+    "Patch",
+    "bezier",
+]

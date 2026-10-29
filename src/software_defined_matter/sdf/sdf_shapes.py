@@ -53,9 +53,9 @@ def box(p, b, blend="sharp", blend_r=0.0):
     _check_axis_vector("box.b", b, p)
     q = jnp.abs(p) - b
     if blend != "sharp":
-        from software_defined_matter.sdf.sdf_edge_blends import blend_intersect
+        from software_defined_matter.sdf.sdf_edge_blends import op_blend_faces
 
-        return blend_intersect(q, blend, blend_r)
+        return op_blend_faces(q, blend, blend_r)
     return _length(jnp.maximum(q, 0.0)) + jnp.minimum(jnp.max(q, axis=-1), 0.0)
 
 
@@ -342,9 +342,9 @@ def capped_cylinder(p, h, r, blend="sharp", blend_r=0.0):
     """
     d = jnp.stack([jnp.abs(_length(p[..., :2])) - r, jnp.abs(p[..., 2]) - h], axis=-1)
     if blend != "sharp":
-        from software_defined_matter.sdf.sdf_edge_blends import blend_intersect
+        from software_defined_matter.sdf.sdf_edge_blends import op_blend_faces
 
-        return blend_intersect(d, blend, blend_r)
+        return op_blend_faces(d, blend, blend_r)
     return jnp.minimum(jnp.max(d, axis=-1), 0.0) + _length(jnp.maximum(d, 0.0))
 
 

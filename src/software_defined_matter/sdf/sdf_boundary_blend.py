@@ -529,3 +529,14 @@ def _check_chain(curves, tol=GAP_TOL):
                 f"curve {i + 1} ends at {a.tolist()} but curve {(i + 1) % n + 1} "
                 f"starts at {b.tolist()} ({gap:.3g} mm apart): the loop must run head to tail"
             )
+
+
+__all__ = [
+    "KIND",
+    "boundary_blend_params",
+    "check_boundary_blends",
+    "check_per_curve_lists",
+    "compile_boundary_blend",
+    "make_patch",
+    "signed_distance",
+]
