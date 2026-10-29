@@ -371,3 +371,29 @@ def test_actuator_example_is_a_valid_bundle_with_shared_fasteners(tmp_path):
     assert bundle.resolve_port("output").instance == "rotor.shaft"
     assert bundle.definitions["bolt_left"] is bundle.definitions["bolt_right"]
     assert bundle.binding().free_names == ["length", "bolt_radius"]
+
+
+def test_uses_lists_every_occurrence_of_one_file(tmp_path):
+    bundle = _bundle(tmp_path)
+    uses = {path.name: scopes for path, scopes in bundle.uses().items()}
+    assert uses == {
+        "wrist.sdm": ["left", "right"],
+        "rod.sdm": ["left.rod", "right.rod", "default"],
+    }
+    assert bundle.copies() == []
+
+
+def test_copies_finds_the_same_part_saved_under_two_names(tmp_path):
+    _write(tmp_path / "rod.sdm", _part())
+    copy_ = Part.from_dict({**_part().to_dict(), "name": "rod_copy", "metadata": {"note": "x"}})
+    _write(tmp_path / "rod_copy.sdm", copy_)
+    assembly = Assembly(
+        "pair",
+        instances=(
+            Instance("a", PartRef("rod.sdm")),
+            Instance("b", PartRef("rod_copy.sdm")),
+            Instance("c", PartRef("rod.sdm")),
+        ),
+    )
+    bundle = load_bundle(_write(tmp_path / "pair.sdm", assembly))
+    assert [[p.name for p in g] for g in bundle.copies()] == [["rod.sdm", "rod_copy.sdm"]]
