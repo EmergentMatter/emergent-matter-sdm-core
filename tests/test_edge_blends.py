@@ -109,10 +109,10 @@ def test_cylinder_chamfer():
     assert abs(float(d[0])) < 1e-6
 
 
-def test_part_declares_schema_0_6():
+def test_part_declares_schema_0_7():
     tree = sdf_primitive("box", b=[1.0, 1.0, 1.0], blend="round", blend_r=0.2)
     part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)])
-    assert part.to_dict()["schema_version"] == "0.6"
+    assert part.to_dict()["schema_version"] == "0.7"
 
 
 def test_glsl_emits_blends():
@@ -122,3 +122,19 @@ def test_glsl_emits_blends():
     part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)])
     src = emit_glsl(part, tree).scene_source
     assert "sqrt(" in src and "0.7071067811865476" in src
+
+
+def test_glsl_refuses_boundary_blend():
+    from software_defined_matter import sdf_boundary_blend
+
+    sq = [
+        [[0, 0, 0], [10, 0, 0]],
+        [[10, 0, 0], [10, 10, 0]],
+        [[10, 10, 0], [0, 10, 0]],
+        [[0, 10, 0], [0, 0, 0]],
+    ]
+    skin = sdf_boundary_blend(sq, reach=10.0)
+    tree = sdf_op("subtract", [sdf_primitive("box", b=[5.0, 5.0, 5.0]), skin])
+    part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)])
+    with pytest.raises(ValueError, match="raster_field"):
+        emit_glsl(part, tree)

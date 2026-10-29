@@ -80,8 +80,8 @@ def _walk(node: Any, *, can_be_unbounded: bool, region_name: str) -> None:
     node_type = node["type"]
 
     if node_type == "primitive":
-        if node.get("kind") == "plane" and not can_be_unbounded:
-            raise UnboundedRootError(_plane_message(region_name))
+        if node.get("kind") in wire.UNBOUNDED_PRIMITIVES and not can_be_unbounded:
+            raise UnboundedRootError(_unbounded_message(region_name, node["kind"]))
         return
 
     if node_type == "op":
@@ -135,14 +135,13 @@ def _check_phase_frac_requires_centered(node: dict[str, Any], path: str) -> None
     )
 
 
-def _plane_message(region_name: str) -> str:
+def _unbounded_message(region_name: str, kind: str) -> str:
     prefix = f"MaterialRegion {region_name!r}: " if region_name else ""
     return (
-        f"{prefix}`plane` is mathematically infinite and cannot appear here. "
-        "A plane is only valid as a CSG cutting tool: wrap it as the second "
-        "operand of `subtract(<bounded shape>, plane)` to cut, or as an "
-        "operand of `intersect(<bounded shape>, plane)` to keep a half-space. "
-        "If you want a finite slab, use `box` with a thin axis instead."
+        f"{prefix}`{kind}` is unbounded (it extends forever) and cannot appear here. "
+        f"It is only valid as a CSG cutting tool: wrap it as the second "
+        f"operand of `subtract(<bounded shape>, {kind})` to cut away its negative "
+        f"side, or as an operand of `intersect(<bounded shape>, {kind})` to keep it."
     )
 
 
@@ -247,6 +246,13 @@ def _validate_node(
                 raster_origin(node["params"])
             except ValueError as exc:
                 raise SemanticValidationError(f"{path}: {exc}") from exc
+        if spec.name == "boundary_blend":
+            from software_defined_matter.sdf.sdf_boundary_blend import check_per_curve_lists
+
+            try:
+                check_per_curve_lists(node["params"])
+            except ValueError as exc:
+                raise SemanticValidationError(f"{path}.params: {exc}") from exc
         return
 
     if node_type == "op":
@@ -461,6 +467,31 @@ def _validate_scalar_leaf(value: Any, *, ref_ok: bool, known_params: set[str], p
         raise SemanticValidationError(f"{path}: expected a number, got {value!r}")
 
 
+def _validate_point_list(
+    value: Any, pspec: wire.ParamSpec, known_params: set[str], path: str
+) -> None:
+    """One ``point_list`` value (also each entry of a ``point_list_list``)."""
+    if not isinstance(value, (list, tuple)):
+        raise SemanticValidationError(f"{path}: expected a list of points, got {value!r}")
+    if pspec.min_points is not None and len(value) < pspec.min_points:
+        raise SemanticValidationError(
+            f"{path}: needs at least {pspec.min_points} points, got {len(value)}"
+        )
+    if pspec.multiple_of is not None and len(value) % pspec.multiple_of != 0:
+        raise SemanticValidationError(
+            f"{path}: needs a point count that is a multiple of "
+            f"{pspec.multiple_of}, got {len(value)}"
+        )
+    dim = pspec.point_dim
+    for i, pt in enumerate(value):
+        if not isinstance(pt, (list, tuple)) or (dim is not None and len(pt) != dim):
+            raise SemanticValidationError(f"{path}[{i}]: expected a length-{dim} point, got {pt!r}")
+        for j, v in enumerate(pt):
+            _validate_scalar_leaf(
+                v, ref_ok=pspec.ref_ok, known_params=known_params, path=f"{path}[{i}][{j}]"
+            )
+
+
 def _validate_value(
     value: Any,
     pspec: wire.ParamSpec,
@@ -529,27 +560,24 @@ def _validate_value(
         return
 
     if shape == "point_list":
+        _validate_point_list(value, pspec, known_params, path)
+        return
+
+    if shape == "point_list_list":
         if not isinstance(value, (list, tuple)):
-            raise SemanticValidationError(f"{path}: expected a list of points, got {value!r}")
-        if pspec.min_points is not None and len(value) < pspec.min_points:
+            raise SemanticValidationError(f"{path}: expected a list of point lists, got {value!r}")
+        for i, pl in enumerate(value):
+            _validate_point_list(pl, pspec, known_params, f"{path}[{i}]")
+        return
+
+    if shape == "string_list":
+        if not isinstance(value, (list, tuple)) or not all(isinstance(v, str) for v in value):
+            raise SemanticValidationError(f"{path}: expected a list of strings, got {value!r}")
+        bad = [v for v in value if pspec.choices is not None and v not in pspec.choices]
+        if bad:
             raise SemanticValidationError(
-                f"{path}: needs at least {pspec.min_points} points, got {len(value)}"
+                f"{path}: expected entries from {pspec.choices}, got {bad!r}"
             )
-        if pspec.multiple_of is not None and len(value) % pspec.multiple_of != 0:
-            raise SemanticValidationError(
-                f"{path}: needs a point count that is a multiple of "
-                f"{pspec.multiple_of}, got {len(value)}"
-            )
-        dim = pspec.point_dim
-        for i, pt in enumerate(value):
-            if not isinstance(pt, (list, tuple)) or (dim is not None and len(pt) != dim):
-                raise SemanticValidationError(
-                    f"{path}[{i}]: expected a length-{dim} point, got {pt!r}"
-                )
-            for j, v in enumerate(pt):
-                _validate_scalar_leaf(
-                    v, ref_ok=pspec.ref_ok, known_params=known_params, path=f"{path}[{i}][{j}]"
-                )
         return
 
     if shape == "string":

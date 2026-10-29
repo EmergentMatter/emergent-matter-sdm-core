@@ -1,0 +1,102 @@
+{
+  "schema_version": "0.7",
+  "kind": "part",
+  "name": "conformance_edge_and_boundary_blend",
+  "metadata": {},
+  "params": {
+    "edge_r": {
+      "name": "edge_r",
+      "value": 0.25,
+      "free": false,
+      "bounds": null,
+      "unit": "mm"
+    }
+  },
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "solid",
+      "sdf_tree": {
+        "type": "op",
+        "op": "subtract",
+        "children": [
+          {
+            "type": "primitive",
+            "kind": "box",
+            "params": {
+              "b": [
+                2.0,
+                2.0,
+                2.0
+              ],
+              "blend": "round",
+              "blend_r": {
+                "$ref": "edge_r"
+              }
+            }
+          },
+          {
+            "type": "primitive",
+            "kind": "boundary_blend",
+            "params": {
+              "curves": [
+                [
+                  [
+                    -4.0,
+                    -4.0,
+                    1.0
+                  ],
+                  [
+                    4.0,
+                    -4.0,
+                    1.0
+                  ]
+                ],
+                [
+                  [
+                    4.0,
+                    -4.0,
+                    1.0
+                  ],
+                  [
+                    4.0,
+                    4.0,
+                    1.0
+                  ]
+                ],
+                [
+                  [
+                    4.0,
+                    4.0,
+                    1.0
+                  ],
+                  [
+                    -4.0,
+                    4.0,
+                    1.0
+                  ]
+                ],
+                [
+                  [
+                    -4.0,
+                    4.0,
+                    1.0
+                  ],
+                  [
+                    -4.0,
+                    -4.0,
+                    1.0
+                  ]
+                ]
+              ],
+              "reach": 8.0
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "objectives": [],
+  "constraints": [],
+  "history": []
+}

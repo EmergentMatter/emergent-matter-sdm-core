@@ -33,6 +33,7 @@ from typing import Any, NamedTuple
 
 import numpy as np
 
+from software_defined_matter import wire
 from software_defined_matter.model import Part, SDFTree
 from software_defined_matter.sdf.bbox import BBox, infer_sdf_bbox
 
@@ -735,6 +736,11 @@ class _GLSLEmitter:
                 raise ValueError(f"Primitive {kind!r} is 2-D but used in a {dim}-D context.")
             return self._emit_polygon_2d(self._curve_to_polygon(node))
         if kind not in _PRIM_SPECS:
+            if kind in wire.PRIMITIVES:
+                raise ValueError(
+                    f"Primitive {kind!r} has no GLSL routine: bake it to a raster_field "
+                    "for viewing (see sdf.bake.bake_raster_field)"
+                )
             raise ValueError(f"Unknown primitive {kind!r}")
         spec = _PRIM_SPECS[kind]
         if spec.dim != dim:

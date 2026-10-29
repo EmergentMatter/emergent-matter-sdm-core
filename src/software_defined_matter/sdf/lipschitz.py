@@ -40,6 +40,7 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING, Any
 
+from software_defined_matter import wire
 from software_defined_matter.sdf.bbox import (
     BBox,
     Interval,
@@ -113,6 +114,10 @@ def _node_rate(node: Any, intervals: dict[str, Interval], domain: BBox | None) -
     node_type = node["type"]
 
     if node_type == "primitive":
+        # An approximate signed field (e.g. boundary_blend, whose foot-point
+        # search can read long far from its skin) claims no bound.
+        if node.get("kind") in wire.APPROXIMATE_DISTANCE_PRIMITIVES:
+            return UNKNOWN
         return _PRIMITIVE_RATE
 
     if node_type == "op":

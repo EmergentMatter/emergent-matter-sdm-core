@@ -1291,16 +1291,6 @@
                     },
                     "minItems": 3,
                     "maxItems": 3
-                  },
-                  "blend": {
-                    "enum": [
-                      "sharp",
-                      "round",
-                      "chamfer"
-                    ]
-                  },
-                  "blend_r": {
-                    "$ref": "#/$defs/scalarValue"
                   }
                 },
                 "required": [
@@ -1494,16 +1484,6 @@
                     "$ref": "#/$defs/scalarValue"
                   },
                   "r": {
-                    "$ref": "#/$defs/scalarValue"
-                  },
-                  "blend": {
-                    "enum": [
-                      "sharp",
-                      "round",
-                      "chamfer"
-                    ]
-                  },
-                  "blend_r": {
                     "$ref": "#/$defs/scalarValue"
                   }
                 },
@@ -2927,18 +2907,7 @@
               "params": {
                 "type": "object",
                 "additionalProperties": false,
-                "properties": {
-                  "blend": {
-                    "enum": [
-                      "sharp",
-                      "round",
-                      "chamfer"
-                    ]
-                  },
-                  "blend_r": {
-                    "$ref": "#/$defs/scalarValue"
-                  }
-                }
+                "properties": {}
               }
             }
           }
@@ -3126,18 +3095,7 @@
               "params": {
                 "type": "object",
                 "additionalProperties": false,
-                "properties": {
-                  "blend": {
-                    "enum": [
-                      "sharp",
-                      "round",
-                      "chamfer"
-                    ]
-                  },
-                  "blend_r": {
-                    "$ref": "#/$defs/scalarValue"
-                  }
-                }
+                "properties": {}
               }
             }
           }
@@ -3162,18 +3120,7 @@
               "params": {
                 "type": "object",
                 "additionalProperties": false,
-                "properties": {
-                  "blend": {
-                    "enum": [
-                      "sharp",
-                      "round",
-                      "chamfer"
-                    ]
-                  },
-                  "blend_r": {
-                    "$ref": "#/$defs/scalarValue"
-                  }
-                }
+                "properties": {}
               }
             }
           }
