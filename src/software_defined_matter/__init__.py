@@ -51,6 +51,7 @@ from software_defined_matter.model import (
     sdf_screw_thread,
     sdf_sweep,
     sdf_transform,
+    sdf_vsweep,
     supports_version,
 )
 from software_defined_matter.ports import Frame
@@ -132,6 +133,7 @@ __all__ = [
     "sdf_primitive",
     "sdf_raster_field",
     "sdf_sweep",
+    "sdf_vsweep",
     "sdf_transform",
     "supports_version",
     "validate",

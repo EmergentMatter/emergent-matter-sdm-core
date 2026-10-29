@@ -119,6 +119,10 @@ def _walk(node: Any, *, can_be_unbounded: bool, region_name: str) -> None:
         # they are inherently bounded: nothing further to check.
         return
 
+    if node_type == "vsweep":
+        # A finite path carrying a 2-D profile: bounded by construction.
+        return
+
 
 def _check_phase_frac_requires_centered(node: dict[str, Any], path: str) -> None:
     """``phase_frac`` offsets the centered wedge only; fail loud otherwise."""
@@ -296,6 +300,17 @@ def _validate_node(
         _validate_child(node, known_params, path, 2)
         return
 
+    if node_type == "vsweep":
+        _check_dim(wire.VSWEEP, expected_dim, path, "type")
+        _validate_params(node, wire.VSWEEP, known_params, path)
+        global _ALONG_DEPTH
+        _ALONG_DEPTH += 1
+        try:
+            _validate_child(node, known_params, path, 2)
+        finally:
+            _ALONG_DEPTH -= 1
+        return
+
     if node_type == "loft":
         _check_dim(wire.LOFT, expected_dim, path, "type")
         _validate_params(node, wire.LOFT, known_params, path)
@@ -461,6 +476,12 @@ def _validate_scalar_leaf(value: Any, *, ref_ok: bool, known_params: set[str], p
         raise SemanticValidationError(f"{path}: expected a number, got {value!r}")
 
 
+#: How many ``vsweep`` profiles the validator is currently inside. A
+#: ``{"$along": [...]}`` leaf (one value per path vertex) is only meaningful
+#: there; anywhere else it is an unrecognised leaf.
+_ALONG_DEPTH = 0
+
+
 def _validate_value(
     value: Any,
     pspec: wire.ParamSpec,
@@ -473,8 +494,27 @@ def _validate_value(
     ``expected_dim`` only matters for ``axis_vector``, whose length is fixed by
     the subtree rather than by the contract. Every other shape is a fixed
     length and ignores it.
+
+    Inside a ``vsweep`` profile a value may be ``{"$along": [v_0, ...]}``:
+    one value per path vertex, each shaped as the contract declares.
     """
     shape = pspec.wire_shape
+
+    if isinstance(value, dict) and "$along" in value:
+        if _ALONG_DEPTH == 0:
+            raise SemanticValidationError(
+                f"{path}: an '$along' leaf is only accepted inside a vsweep profile"
+            )
+        if set(value) != {"$along"} or shape in ("string", "bool", "object"):
+            raise SemanticValidationError(f"{path}: malformed '$along' leaf {value!r}")
+        values = value["$along"]
+        if not isinstance(values, (list, tuple)) or len(values) < 2:
+            raise SemanticValidationError(
+                f"{path}.$along: expected a list of at least 2 per-vertex values"
+            )
+        for i, item in enumerate(values):
+            _validate_value(item, pspec, known_params, f"{path}.$along[{i}]", expected_dim)
+        return
 
     if shape == "scalar":
         _validate_scalar_leaf(value, ref_ok=pspec.ref_ok, known_params=known_params, path=path)

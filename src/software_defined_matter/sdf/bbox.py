@@ -137,6 +137,8 @@ def _infer_node_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BB
         return _infer_deform_bbox(node, intervals)
     if node_type == "sweep":
         return _infer_sweep_bbox(node, intervals)
+    if node_type == "vsweep":
+        return _infer_vsweep_bbox(node, intervals)
     raise UnsupportedSDFNodeError(f"Unknown node type {node_type!r}")
 
 
@@ -590,6 +592,84 @@ def _infer_sweep_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> B
     (pxlo, pylo), (pxhi, pyhi) = _infer_2d_primitive_bbox(node["child"], intervals)
     rad = math.sqrt(max(abs(pxlo), abs(pxhi)) ** 2 + max(abs(pylo), abs(pyhi)) ** 2)
     return (_vec3(lo[a] - rad for a in range(3)), _vec3(hi[a] + rad for a in range(3)))
+
+
+def _infer_vsweep_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox:
+    """3D bbox for a ``vsweep`` node: the path's vertex hull inflated by the
+    profile's largest in-plane extent over the vertices (each ``$along`` leaf
+    substituted by its value at that vertex) and once more for the mitre
+    overhang, which cannot exceed the section's own size past a vertex."""
+    params = node.get("params") or {}
+    pts = params.get("path")
+    if not isinstance(pts, (list, tuple)) or not pts:
+        raise UnsupportedSDFNodeError(
+            "vsweep needs a non-empty 'path' vertex list for bbox inference"
+        )
+    ivs = [_vec_intervals(pt, 3, intervals) for pt in pts]
+    lo = [min(iv[a][0] for iv in ivs) for a in range(3)]
+    hi = [max(iv[a][1] for iv in ivs) for a in range(3)]
+    rad = 0.0
+    for k in range(len(pts)):
+        child_k = _substitute_along(node["child"], k)
+        (pxlo, pylo), (pxhi, pyhi) = _infer_2d_tree_bbox(child_k, intervals)
+        rad = max(rad, math.sqrt(max(abs(pxlo), abs(pxhi)) ** 2 + max(abs(pylo), abs(pyhi)) ** 2))
+    pad = 2.0 * rad
+    return (_vec3(lo[a] - pad for a in range(3)), _vec3(hi[a] + pad for a in range(3)))
+
+
+def _infer_2d_tree_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox2:
+    """2D AABB for a 2-D profile TREE: a primitive, a CSG op over 2-D
+    children (union: the hull; subtract: the first child's; intersect: the
+    overlap of the children's), a ``round`` or ``onion`` modifier (grown by
+    its amount), or a translate. Anything else in a profile
+    has no 2-D bound here: give the part an explicit ``metadata['bbox']``."""
+    if not isinstance(node, dict):
+        raise UnsupportedSDFNodeError(f"not a 2-D profile node: {node!r}")
+    node_type = node.get("type")
+    if node_type == "primitive":
+        return _infer_2d_primitive_bbox(node, intervals)
+    if node_type == "op":
+        op = node.get("op", "")
+        kids = [_infer_2d_tree_bbox(c, intervals) for c in node.get("children") or []]
+        if not kids:
+            raise UnsupportedSDFNodeError("2-D op has no children")
+        if op in ("subtract", "smooth_subtract"):
+            return kids[0]
+        if op in ("intersect", "smooth_intersect"):
+            lo = (max(k[0][0] for k in kids), max(k[0][1] for k in kids))
+            hi = (min(k[1][0] for k in kids), min(k[1][1] for k in kids))
+            return lo, hi
+        lo = (min(k[0][0] for k in kids), min(k[0][1] for k in kids))
+        hi = (max(k[1][0] for k in kids), max(k[1][1] for k in kids))
+        if op.startswith("smooth"):
+            pad = _scalar_abs_max(((node.get("params") or {}).get("k", 0.0)), intervals)
+            lo, hi = (lo[0] - pad, lo[1] - pad), (hi[0] + pad, hi[1] + pad)
+        return lo, hi
+    if node_type == "modifier" and node.get("modifier") in ("round", "onion"):
+        (xlo, ylo), (xhi, yhi) = _infer_2d_tree_bbox(node["child"], intervals)
+        kw = node.get("params") or {}
+        pad = _scalar_abs_max(kw.get("r", kw.get("thickness", 0.0)), intervals)
+        return (xlo - pad, ylo - pad), (xhi + pad, yhi + pad)
+    if node_type == "transform" and node.get("transform") == "translate":
+        (xlo, ylo), (xhi, yhi) = _infer_2d_tree_bbox(node["child"], intervals)
+        t = _vec_intervals((node.get("params") or {})["t"], 2, intervals)
+        return (xlo + t[0][0], ylo + t[1][0]), (xhi + t[0][1], yhi + t[1][1])
+    raise UnsupportedSDFNodeError(
+        f"no 2-D bound for a {node_type!r} node in a vsweep profile; "
+        "give the part an explicit metadata['bbox']"
+    )
+
+
+def _substitute_along(tree: Any, k: int) -> Any:
+    """``tree`` with every ``{"$along": [...]}`` leaf replaced by its k-th value."""
+    if isinstance(tree, dict):
+        if "$along" in tree:
+            values = tree["$along"]
+            return values[min(k, len(values) - 1)]
+        return {key: _substitute_along(v, k) for key, v in tree.items()}
+    if isinstance(tree, list):
+        return [_substitute_along(v, k) for v in tree]
+    return tree
 
 
 def _infer_deform_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox:

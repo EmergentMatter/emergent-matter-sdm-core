@@ -678,6 +678,11 @@ class _GLSLEmitter:
             return self._emit_sweep(node)
         if kind == "2d_to_3d":
             return self._emit_2d_to_3d(node, dim)
+        if kind == "vsweep":
+            raise ValueError(
+                "vsweep has no GLSL routine yet: bake it to a raster_field for viewing "
+                "(see sdf.bake.bake_raster_field)"
+            )
         raise ValueError(f"Unknown SDF node type {kind!r}")
 
     # -- Primitive -------------------------------------------------------
