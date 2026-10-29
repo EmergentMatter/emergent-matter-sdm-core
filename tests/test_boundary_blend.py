@@ -17,6 +17,7 @@ from software_defined_matter import (
     sdf_primitive,
     sdf_transform,
 )
+from software_defined_matter.sdf import sdf_boundary_blend as sdf_boundary_blend_module
 from software_defined_matter.sdf.bake import bake_raster_field
 from software_defined_matter.sdf.boundary_blend_check import (
     boundary_error,
@@ -189,11 +190,11 @@ def test_only_valid_as_a_cutter():
     validate_material_tree(sdf_op("subtract", [sdf_primitive("box", b=[5.0, 5.0, 5.0]), skin]))
 
 
-def test_part_declares_schema_0_6():
+def test_part_declares_schema_0_7():
     skin = sdf_boundary_blend(_square(), reach=40.0, check=False)
     tree = sdf_op("subtract", [sdf_primitive("box", b=[5.0, 5.0, 5.0]), skin])
     part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)])
-    assert part.to_dict()["schema_version"] == "0.6"
+    assert part.to_dict()["schema_version"] == "0.7"
 
 
 def test_bake_matches_analytic():
@@ -228,6 +229,101 @@ def test_wire_format_is_lists():
     part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)])
     with pytest.raises(Exception, match="sideways"):
         validate_document_semantics(part.to_dict())
+
+
+def _wire(curves):
+    return [np.asarray(c, float).tolist() for c in curves]
+
+
+def _semantics_of(params):
+    """Run document validation on a cut by a skin with these raw params."""
+    from software_defined_matter.sdf.validate import validate_document_semantics
+
+    skin = {"type": "primitive", "kind": "boundary_blend", "params": params}
+    tree = sdf_op("subtract", [sdf_primitive("box", b=[5.0, 5.0, 5.0]), skin])
+    part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)])
+    validate_document_semantics(part.to_dict())
+
+
+@pytest.mark.parametrize(
+    ("extra", "match"),
+    [
+        ({"conditions": ["normal"], "vectors": [[0, 0, 1]]}, "4 curves but 1 conditions"),
+        ({"weights": [1.0, 1.0]}, "4 curves but 2 weights"),
+        (
+            {"conditions": ["free"] * 4, "vectors": [[0, 0, 1]] * 3},
+            "4 curves but 3 vectors",
+        ),
+        ({"conditions": ["normal", "free", "free", "free"]}, "no vectors"),
+    ],
+)
+def test_validation_checks_the_per_curve_lists(extra, match):
+    from software_defined_matter.sdf.validate import SemanticValidationError
+
+    with pytest.raises(SemanticValidationError, match=match):
+        _semantics_of({"curves": _wire(_square())} | extra)
+
+
+def test_validation_checks_the_curve_count():
+    from software_defined_matter.sdf.validate import SemanticValidationError
+
+    six = _wire(_square() + _square()[:2])
+    with pytest.raises(SemanticValidationError, match="3 or 4 curves, got 6"):
+        _semantics_of({"curves": six})
+
+
+def test_a_directed_condition_without_vectors_is_refused_at_compile():
+    """No silent +Z: a hand-written node that asks for a direction must say which."""
+    with pytest.raises(ValueError, match="no vectors"):
+        make_patch({"curves": _square(), "conditions": ["normal"] * 4})
+
+
+@pytest.mark.parametrize("mode", ["normal", "tangent"])
+def test_a_zero_direction_is_refused(mode):
+    """A zero vector used to pass the plan's check (NaN > 0.5 is False) and
+    then quietly behave like "free"."""
+    from software_defined_matter.sdf.validate import SemanticValidationError
+
+    params = {
+        "curves": _wire(_square()),
+        "conditions": [mode, "free", "free", "free"],
+        "vectors": [[0, 0, 0], [0, 0, 1], [0, 0, 1], [0, 0, 1]],
+    }
+    with pytest.raises(SemanticValidationError, match="zero vector"):
+        _semantics_of(params)
+    with pytest.raises(ValueError, match="zero vector"):
+        make_patch(params)
+
+
+def test_a_loop_closed_to_float32_rounding_is_accepted():
+    """The same corner written two ways differs by ~4e-6 mm in float32 at 55 mm."""
+    curves = [np.asarray(c, float) * 55.0 / 8.0 for c in _square()]
+    curves[1][0] += [3.8e-6, 0.0, 0.0]
+    make_patch({"curves": curves})
+
+
+def _folding_square():
+    """Curve 1 bulges out past the opposite side: the surface turns over."""
+    c1 = [[-8, -8, 0], [-3, 30, 0], [3, 30, 0], [8, -8, 0]]
+    return [c1, [[8, -8, 0], [8, 8, 0]], [[8, 8, 0], [-8, 8, 0]], [[-8, 8, 0], [-8, -8, 0]]]
+
+
+def test_compile_refuses_a_skin_that_folds():
+    """Built with check=False (or loaded from a file), the fold is still caught
+    when the part compiles."""
+    skin = sdf_boundary_blend(_folding_square(), reach=40.0, check=False)
+    tree = sdf_op("subtract", [sdf_primitive("box", b=[5.0, 5.0, 5.0]), skin])
+    with pytest.raises(ValueError, match="folds over at its nominal design"):
+        _closure(tree)
+
+
+def test_check_boundary_blends_reports_each_skin(crowned):
+    from software_defined_matter.sdf.sdf_boundary_blend import check_boundary_blends
+
+    _, part = crowned
+    reports = check_boundary_blends(part)
+    assert list(reports) == ["materials[0].sdf_tree.children[1]"]
+    assert reports["materials[0].sdf_tree.children[1]"]["ok"]
 
 
 # ---------------------------------------------------------------- differentiable
@@ -298,22 +394,24 @@ def test_volume_is_differentiable_in_a_control_point(crowned):
 
 def test_guides_are_differentiable_too():
     """A dome over a square set by two crossing guides whose height is a
-    free parameter: the crossing is re-found as the guides move."""
+    free parameter: the crossing is re-found as the guides move. (Kept low:
+    a steeper dome's extensions twist over within a few mm of its edges,
+    which the compile-time fold check refuses.)"""
     from software_defined_matter import Param, make_param_ref
 
     a = make_param_ref("a")
     u_guide = [[0, 5, 0], [10 / 3, 5, a], [20 / 3, 5, a], [10, 5, 0]]
     v_guide = [[5, 0, 0], [5, 10 / 3, a], [5, 20 / 3, a], [5, 10, 0]]
-    skin = sdf_boundary_blend(_square(), guides=[u_guide, v_guide], reach=40.0)
+    skin = sdf_boundary_blend(_square(), guides=[u_guide, v_guide], reach=12.0)
     tree = sdf_op("subtract", [sdf_primitive("box", b=[5.0, 5.0, 5.0]), skin])
     part = Part(
         name="t",
-        params={"a": Param(name="a", value=4.0, free=True, unit="mm")},
+        params={"a": Param(name="a", value=1.0, free=True, unit="mm")},
         materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)],
     )
     f = make_sdf_closure(skin, part)
     q = jnp.array([[5.0, 5.0, 4.0], [3.0, 6.0, 2.0]])
-    fv = jnp.asarray([4.0])
+    fv = jnp.asarray([1.0])
     grad = jax.jacfwd(lambda v: f(q, v))(fv)[:, 0]
     e = 0.01
     fd = (f(q, fv + e) - f(q, fv - e)) / (2 * e)
@@ -329,6 +427,84 @@ def test_rate_is_unknown():
     tree = sdf_op("subtract", [sdf_primitive("box", b=[5.0, 5.0, 5.0]), skin])
     part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)])
     assert infer_sdf_max_rate(tree, part) == UNKNOWN
+
+
+def test_value_matches_a_densely_seeded_reference(monkeypatch):
+    """The distance audit (test_sdf_is_distance) checks the gradient's length,
+    which is the unit normal here whether or not the right foot was found.
+    This checks the value: against the same solver started from ~100x more
+    seeds, the sign never differs and the distance stays within the
+    docstring's bound."""
+    from software_defined_matter.sdf import sdf_boundary_blend as sbb
+
+    curves, conds = _soap_quarter()
+    dome = Patch(curves, [c[0] for c in conds], [c[1] for c in conds], [1, 1, 1])
+    rng = np.random.default_rng(0)
+    q = jnp.asarray(rng.uniform([-5.0, -5.0, -5.0], [50.0, 35.0, 30.0], (600, 3)))
+    value = np.asarray(signed_distance(q, dome, 56.0))
+    dense = np.concatenate([np.linspace(-1, 0, 60, endpoint=False), np.linspace(0, 1, 201)])
+    dense = np.concatenate([dense, np.linspace(1, 2, 61)[1:]])
+    monkeypatch.setattr(sbb, "_grid", lambda n_in=17, n_out=9, dense_at_0=False: dense)
+    reference = np.asarray(signed_distance(q, dome, 56.0))
+    assert np.array_equal(np.sign(value), np.sign(reference))
+    assert np.abs(value - reference).max() < 0.1
+
+
+def test_second_derivatives_follow_the_sliding_foot():
+    """With the implicit foot derivative, d(normal)/d(param) and the spatial
+    Hessian (the skin's curvature) match finite differences of the gradient.
+    A foot held fixed gets both wrong off the skin. One compile (~2-3 min)."""
+    corners = [(-20.0, -20.0), (20.0, -20.0), (20.0, 20.0), (-20.0, 20.0)]
+
+    def curves(h):
+        out = []
+        for k in range(4):
+            a = jnp.array([*corners[k], 0.0])
+            b = jnp.array([*corners[(k + 1) % 4], 0.0])
+            lift = jnp.array([0.0, 0.0, 1.0]) * h
+            out.append(jnp.stack([a, a + (b - a) / 3 + lift, a + 2 * (b - a) / 3 + lift, b]))
+        return out
+
+    plan = make_patch({"curves": [np.asarray(c) for c in curves(6.0)]}).plan
+
+    def f(p, h):
+        patch = make_patch({"curves": curves(h)}, plan=plan)
+        return signed_distance(p[None], patch, 60.0, implicit_foot=True)[0]
+
+    grad_p = jax.jit(jax.grad(f))
+    second = jax.jit(jax.jacfwd(jax.grad(f), argnums=(0, 1)))
+    p, h, e = jnp.array([8.0, -5.0, 10.0]), 6.0, 1e-2  # ~2 mm below the skin
+    hessian, d_normal = (np.asarray(x) for x in second(p, h))
+    fd_normal = (np.asarray(grad_p(p, h + e)) - np.asarray(grad_p(p, h - e))) / (2 * e)
+    fd_hessian = np.stack(
+        [
+            (np.asarray(grad_p(p + d, h)) - np.asarray(grad_p(p - d, h))) / (2 * e)
+            for d in e * jnp.eye(3)
+        ]
+    )
+    assert np.linalg.norm(fd_hessian) > 0.01  # curved here, so the check means something
+    assert np.allclose(d_normal, fd_normal, rtol=0.01, atol=1e-4)
+    assert np.allclose(hessian, fd_hessian, rtol=0.01, atol=1e-4)
+
+
+@pytest.mark.parametrize("b_implicit_foot", [False, True])
+def test_make_sdf_closure_passes_the_implicit_foot_option_down(monkeypatch, b_implicit_foot):
+    """The option reaches every boundary_blend in the tree, here one under a
+    subtract, and the foot is differentiated implicitly only when asked."""
+    calls = []
+    real = sdf_boundary_blend_module._implicit_foot
+
+    def spy(*args):
+        calls.append(1)
+        return real(*args)
+
+    monkeypatch.setattr(sdf_boundary_blend_module, "_implicit_foot", spy)
+    skin = sdf_boundary_blend(_square(), reach=10.0, check=False)
+    tree = sdf_op("subtract", [sdf_primitive("sphere", r=5.0), skin])
+    part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)])
+    f = make_sdf_closure(tree, part, b_implicit_foot=b_implicit_foot)
+    f(jnp.zeros((1, 3)))
+    assert bool(calls) is b_implicit_foot
 
 
 def test_spatial_gradient_is_the_normal_on_and_near_the_skin():

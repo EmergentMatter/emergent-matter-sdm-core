@@ -80,8 +80,8 @@ def _walk(node: Any, *, can_be_unbounded: bool, region_name: str) -> None:
     node_type = node["type"]
 
     if node_type == "primitive":
-        if node.get("kind") in _CUTTERS and not can_be_unbounded:
-            raise UnboundedRootError(_plane_message(region_name, node["kind"]))
+        if node.get("kind") in wire.UNBOUNDED_PRIMITIVES and not can_be_unbounded:
+            raise UnboundedRootError(_unbounded_message(region_name, node["kind"]))
         return
 
     if node_type == "op":
@@ -135,25 +135,13 @@ def _check_phase_frac_requires_centered(node: dict[str, Any], path: str) -> None
     )
 
 
-#: Unbounded primitives that are only valid as CSG cutting tools.
-_CUTTERS = ("plane", "boundary_blend")
-
-
-def _plane_message(region_name: str, kind: str = "plane") -> str:
+def _unbounded_message(region_name: str, kind: str) -> str:
     prefix = f"MaterialRegion {region_name!r}: " if region_name else ""
-    if kind == "boundary_blend":
-        return (
-            f"{prefix}`boundary_blend` is a cutting skin (unbounded: it carries on past "
-            "its edges) and cannot appear here. Use it as the second operand of "
-            "`subtract(<bounded shape>, skin)` to cut away the skin's negative side, or "
-            "as an operand of `intersect(<bounded shape>, skin)` to keep it."
-        )
     return (
-        f"{prefix}`plane` is mathematically infinite and cannot appear here. "
-        "A plane is only valid as a CSG cutting tool: wrap it as the second "
-        "operand of `subtract(<bounded shape>, plane)` to cut, or as an "
-        "operand of `intersect(<bounded shape>, plane)` to keep a half-space. "
-        "If you want a finite slab, use `box` with a thin axis instead."
+        f"{prefix}`{kind}` is unbounded (it extends forever) and cannot appear here. "
+        f"It is only valid as a CSG cutting tool: wrap it as the second "
+        f"operand of `subtract(<bounded shape>, {kind})` to cut away its negative "
+        f"side, or as an operand of `intersect(<bounded shape>, {kind})` to keep it."
     )
 
 
@@ -258,6 +246,13 @@ def _validate_node(
                 raster_origin(node["params"])
             except ValueError as exc:
                 raise SemanticValidationError(f"{path}: {exc}") from exc
+        if spec.name == "boundary_blend":
+            from software_defined_matter.sdf.sdf_boundary_blend import check_per_curve_lists
+
+            try:
+                check_per_curve_lists(node["params"])
+            except ValueError as exc:
+                raise SemanticValidationError(f"{path}.params: {exc}") from exc
         return
 
     if node_type == "op":

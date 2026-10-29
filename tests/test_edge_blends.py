@@ -109,10 +109,10 @@ def test_cylinder_chamfer():
     assert abs(float(d[0])) < 1e-6
 
 
-def test_part_declares_schema_0_6():
+def test_part_declares_schema_0_7():
     tree = sdf_primitive("box", b=[1.0, 1.0, 1.0], blend="round", blend_r=0.2)
     part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)])
-    assert part.to_dict()["schema_version"] == "0.6"
+    assert part.to_dict()["schema_version"] == "0.7"
 
 
 def test_glsl_emits_blends():

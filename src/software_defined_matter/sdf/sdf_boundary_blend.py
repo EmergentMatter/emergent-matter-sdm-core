@@ -43,21 +43,28 @@ DIFFERENTIABLE IN ITS SHAPE. Curve and guide control points may be named
 parameters ($ref) or expressions. The topology (which curve is which side,
 guide order, which curves cross) is fixed once from the nominal design; the
 geometry is rebuilt in JAX from the live parameter values every evaluation
-(see boundary_blend_patch.Patch). The foot of the perpendicular is held fixed
-for the derivative (at the true foot, sliding along the skin does not change
-the distance to first order), so d(distance)/d(parameter) is -n . dS/dparam
-there: exact, and cheap. If the parameters move far enough to change the
-topology (guides crossing twice, the skin folding), the derivative stops
-meaning anything: re-run `boundary_blend_check.quality_report` at the new
-design, as an optimiser's checkpoint would.
+(see boundary_blend_patch.Patch). The foot of the perpendicular is held
+fixed under differentiation by default: sliding it along the skin does not
+change the distance to first order, so the value's derivative,
+-n . dS/dparam, and the spatial gradient, the unit normal, are exact. That
+is all `volume`, `surface_area` and meshing read. What depends on where the
+foot is (the normal's derivative, the spatial Hessian) is not: pass
+``b_implicit_foot=True`` to ``make_sdf_closure`` to differentiate the foot
+implicitly (``jax.lax.custom_root``, one 2 x 2 solve per point), which makes
+those exact too, at about 2.4x the compile time and 2x the run time of a
+first-order gradient (docs/adr/0009). If the parameters move far enough to
+change the topology (guides crossing twice, the skin folding), the derivative
+stops meaning anything: check the new design with `check_boundary_blends`, as
+an optimiser's checkpoint would.
 
-ACCURACY: AN APPROXIMATE SIGNED FIELD, NOT A GUARANTEED DISTANCE. The value
-is the distance to a point that IS on the skin, so it is never shorter than
-the true distance: it can only be too long. Near the skin (where the solver
-starts next to the foot) it is exact to well under a micron. Far from it
-(tens of mm, or across a deep fold of the part) the solver can settle on a
-point that is not the nearest one, and the value can read long by a few
-tenths of a mm, or jump where two candidate feet swap. So it does NOT carry
+ACCURACY: AN APPROXIMATE SIGNED FIELD, NOT A GUARANTEED DISTANCE. Near the
+skin (where the solver starts next to the foot) it is exact to well under a
+micron. Far from it (tens of mm, or across a deep fold of the part) the
+solver can settle on a point that is not the nearest one, and the value
+reads long, or jump where two candidate feet swap. Where the search stops
+just short of the foot, the gap is measured along the normal and reads a
+little short instead. On the saddle seat example both errors stayed under
+0.08 mm at 9 to 23 mm from the skin. So it does NOT carry
 the primitive promise of a rate <= 1 everywhere: `sdf.lipschitz` reports it
 as UNKNOWN (like `loft` and `vsweep`), and everything that culls space on a
 rate bound stops trusting it. The sign and the zero set are right everywhere,
@@ -75,7 +82,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from software_defined_matter.sdf.boundary_blend_patch import MODES, Patch
+from software_defined_matter.sdf.boundary_blend_patch import GAP_TOL, MODES, Patch
 
 KIND = "boundary_blend"
 _N_NEWTON = 20
@@ -94,24 +101,52 @@ def _grid(n_in=17, n_out=9, dense_at_0=False):
     return np.concatenate([-out[::-1], inner, 1.0 + out])
 
 
+def check_per_curve_lists(params) -> None:
+    """Raise ValueError unless the node's per-curve lists fit its curves.
+
+    3 or 4 ``curves``; ``conditions``, ``vectors`` and ``weights``, when
+    given, have one entry per curve; and ``vectors`` is given, non-zero,
+    for every "normal" or "tangent" condition (those need a direction).
+    Curves are only counted, so wire values that still hold ``$ref`` leaves
+    pass through.
+    """
+    curves = params.get("curves")
+    n = len(curves) if isinstance(curves, (list, tuple)) else 0
+    if n not in (3, 4):
+        raise ValueError(f"boundary_blend needs 3 or 4 curves, got {n}")
+    for name in ("conditions", "vectors", "weights"):
+        vals = params.get(name)
+        if vals is not None and len(vals) != n:
+            raise ValueError(
+                f"boundary_blend: {n} curves but {len(vals)} {name}: give one per curve"
+            )
+    conditions = params.get("conditions") or []
+    directed = [m for m in conditions if m != "free"]
+    if directed and params.get("vectors") is None:
+        raise ValueError(
+            f"boundary_blend: conditions {directed} need a direction, but there are no "
+            "vectors: give one per curve"
+        )
+    for k, (mode, vec) in enumerate(zip(conditions, params.get("vectors") or [], strict=False)):
+        if mode != "free" and not np.any(np.asarray(vec, dtype=float)):
+            raise ValueError(
+                f"boundary_blend: curve {k + 1} has a {mode!r} condition with a zero vector: "
+                "it needs a direction"
+            )
+
+
 def make_patch(params, plan=None) -> Patch:
     """Patch from node params: ``curves`` (3 or 4 control-point arrays) and
     optional ``guides``, as numbers or as traced values when ``plan`` is
     given; ``conditions`` (one of MODES per curve, default free), ``vectors``
-    (one direction / plane normal per curve, ignored for free) and
-    ``weights`` (one per curve, default 1)."""
+    (one direction / plane normal per curve, required when any condition is
+    not free) and ``weights`` (one per curve, default 1)."""
+    check_per_curve_lists(params)
     curves = list(params["curves"])
     n = len(curves)
-    if n not in (3, 4):
-        raise ValueError(f"boundary_blend needs 3 or 4 curves, got {n}")
     modes = list(params.get("conditions") or ["free"] * n)
-    vecs = list(params.get("vectors") or [[0.0, 0.0, 1.0]] * n)
+    vecs = list(params.get("vectors") or [[0.0, 0.0, 1.0]] * n)  # all free: unused
     weights = list(params.get("weights") or [1.0] * n)
-    for name, vals in (("conditions", modes), ("vectors", vecs), ("weights", weights)):
-        if len(vals) != n:
-            raise ValueError(
-                f"boundary_blend: {n} curves but {len(vals)} {name}: give one per curve"
-            )
     for k, (m, v) in enumerate(zip(modes, vecs, strict=True)):
         if m == "free" and not np.any(np.asarray(v, float)):
             vecs[k] = [0.0, 0.0, 1.0]  # unused, but must be a direction
@@ -126,8 +161,51 @@ def _patch_size(params) -> float:
     return float(np.linalg.norm(pts.max(0) - pts.min(0)))
 
 
-def signed_distance(p, patch: Patch, reach, flip=False):
-    """Signed distance from points `p` (..., 3) to the extended skin."""
+_UV_LO = np.array([-1.0, -1.0])  # the search box in (u, v), as in signed_distance
+_UV_HI = np.array([2.0, 2.0])
+
+
+def _implicit_foot(uv_star, q, S, J):
+    """The foot's (u, v), found by the search, carrying its implicit derivative.
+
+    The foot is where F(u, v) = J^T (S(u, v) - q), the gradient of
+    |S - q|^2 / 2, is zero. ``custom_root`` returns ``uv_star`` unchanged and,
+    under differentiation, moves it by -H^-1 dF (implicit function theorem)
+    with H = dF/d(u, v), so the foot slides as the skin or q moves. A
+    coordinate the search stopped at a bound of is held there, and so is a foot
+    where H is not finite. H is used as
+    a value only (no derivative of it is taken): every term that would
+    need one is multiplied by J^T n or (q - S) . dn, both zero at a foot,
+    so first and second derivatives stay exact. The small ridge keeps the
+    solve finite at a pole, where S_u vanishes.
+    """
+    pinned = (uv_star <= _UV_LO + 1e-6) | (uv_star >= _UV_HI - 1e-6)
+
+    def grad_half_sq(x):
+        ju, jv = J(x[0], x[1])
+        F = jnp.stack([ju, jv], axis=-1).T @ (S(x[0], x[1]) - q)
+        return jnp.where(pinned, x - uv_star, F)
+
+    def tangent_solve(g, y):
+        A = jax.lax.stop_gradient(jax.jacobian(g)(y))
+        # A degenerate point of the parametrisation can leave H non-finite;
+        # hold the foot fixed there (the old behaviour) rather than spread
+        # NaN. Past a corner, where the extension is flat, that is exact.
+        finite = jnp.all(jnp.isfinite(A))
+        A = jnp.where(finite, A, jnp.eye(2))
+        A = A + 1e-9 * (jnp.abs(jnp.trace(A)) + 1e-30) * jnp.eye(2)
+        x = jnp.linalg.solve(A, y)
+        return jnp.where(finite, x, jnp.zeros_like(x))
+
+    return jax.lax.custom_root(grad_half_sq, uv_star, lambda f, x0: x0, tangent_solve)
+
+
+def signed_distance(p, patch: Patch, reach, flip=False, *, implicit_foot=False):
+    """Signed distance from points `p` (..., 3) to the extended skin.
+
+    With ``implicit_foot`` the foot carries its implicit derivative
+    (``_implicit_foot``). Otherwise it is held fixed, which is exact for
+    first derivatives of the value."""
     p = jnp.asarray(p, dtype=float)
     reach = jnp.asarray(reach, dtype=float)
     u_lo, u_hi = -1.0, 2.0
@@ -136,7 +214,10 @@ def signed_distance(p, patch: Patch, reach, flip=False):
     gv = jnp.asarray(_grid(dense_at_0=patch.pole), dtype=float)
     UU, VV = jnp.meshgrid(gu, gv, indexing="ij")
     UU, VV = UU.ravel(), VV.ravel()
-    S = lambda u, v: patch.S_ext(u, v, reach)  # noqa: E731
+
+    def S(u, v):
+        return patch.S_ext(u, v, reach)
+
     G = jax.vmap(S)(UU, VV)  # (Ng, 3)
     J = jax.jacfwd(S, argnums=(0, 1))
 
@@ -163,10 +244,9 @@ def signed_distance(p, patch: Patch, reach, flip=False):
             return uv, lam
 
         uv, _ = jax.lax.fori_loop(0, _N_NEWTON, body, (uv0, jnp.asarray(1e-3, dtype=float)))
-        # Hold the foot's (u, v) fixed for the derivative: at the true foot
-        # the distance does not change to first order as (u, v) slides, so
-        # only how the skin itself moves (and the query point) counts.
         uv = jax.lax.stop_gradient(uv)
+        if implicit_foot:
+            uv = _implicit_foot(uv, q, S, J)
         foot = S(uv[0], uv[1])
         # Normal. At a pole S_u vanishes, so read it a hair off; past a pole
         # (v < 0) the parametrisation runs back through the point, which turns
@@ -216,34 +296,39 @@ def _prim(
     flip=False,
     fold=None,
 ):
-    """Signed distance to a boundary-blend skin, from literal params."""
+    """Signed distance to a boundary-blend skin, from literal params: the
+    compiled node's closure, so the two paths cannot drift apart."""
     params = {
         "curves": curves,
         "conditions": conditions,
         "vectors": vectors,
         "weights": weights,
         "guides": guides,
+        "reach": reach,
+        "flip": flip,
+        "fold": fold,
     }
-    patch = make_patch(params)
-    if reach is None:
-        reach = 2.0 * _patch_size(params)
-    if fold is not None:
-        # Symmetric skin: reflect every point onto the positive side of each
-        # flagged plane (x=0, y=0, z=0) before measuring. Exact when the
-        # skin meets those planes square, as a symmetry plane requires.
-        f = jnp.asarray(fold) > 0.5
-        p = jnp.where(f, jnp.abs(jnp.asarray(p)), p)
-    return signed_distance(p, patch, reach, flip=bool(flip))
+    node = {"params": {k: v for k, v in params.items() if v is not None}}
+    return compile_boundary_blend(node, None, check=False)(p, None)
 
 
-def compile_boundary_blend(node, binding=None):
+def compile_boundary_blend(node, binding=None, *, check=True, implicit_foot=False):
     """Closure ``fn(p, free_vec)`` for a boundary-blend node.
 
     The plan (topology and validity checks) is made ONCE here, from the
     nominal parameter values; every call then rebuilds the geometry from the
     live values in JAX, so curve and guide control points written as
-    ``$ref`` / expressions are differentiable. Everything else (conditions,
+    ``$ref`` / expressions are differentiable. A skin with no named
+    parameters is built once and reused. Everything else (conditions,
     vectors, weights, reach, flip, fold) is structural and must be literal.
+
+    With ``check`` (the default) the nominal skin is refused if it folds
+    (``boundary_blend_check.quality_report``), whether it came from
+    ``boundary_blend_params``, a loaded file, or named parameters.
+
+    With ``implicit_foot`` the foot of the perpendicular is differentiated
+    implicitly (see ``signed_distance``). ``make_sdf_closure`` passes its
+    ``b_implicit_foot`` here.
     """
     from software_defined_matter.dsl.resolve import resolve_param_value
 
@@ -270,13 +355,22 @@ def compile_boundary_blend(node, binding=None):
     plan = patch0.plan
     if reach is None:
         reach = 2.0 * _patch_size(nominal)
+    if check:
+        _refuse_folds(patch0, reach, "at its nominal design")
+    parametric = _has_ref(geo["curves"]) or _has_ref(geo["guides"])
 
     def fn(p, free_vec):
-        patch = patch0 if binding is None else make_patch(resolved(free_vec) | struct, plan=plan)
+        if binding is None or not parametric:
+            patch = patch0
+        else:
+            patch = make_patch(resolved(free_vec) | struct, plan=plan)
         q = p
         if fold is not None:
+            # Symmetric skin: reflect every point onto the positive side of
+            # each flagged plane (x=0, y=0, z=0) before measuring. Exact when
+            # the skin meets those planes square, as a symmetry plane requires.
             q = jnp.where(jnp.asarray(fold) > 0.5, jnp.abs(p), p)
-        return signed_distance(q, patch, reach, flip=flip)
+        return signed_distance(q, patch, reach, flip=flip, implicit_foot=implicit_foot)
 
     return fn
 
@@ -341,16 +435,72 @@ def boundary_blend_params(
     if fold:
         params["fold"] = [1.0 if a in fold else 0.0 for a in "xyz"]
     # With named parameters the network is checked when the part compiles
-    # (on the nominal values); with literal numbers it is checked now.
+    # (on the nominal values); with literal numbers it is checked now too.
     if check and literal:
-        from software_defined_matter.sdf.boundary_blend_check import quality_report
-
-        q = quality_report(
-            make_patch(params), reach if reach is not None else 2.0 * _patch_size(params)
+        _refuse_folds(
+            make_patch(params), reach if reach is not None else 2.0 * _patch_size(params), ""
         )
-        if not q["ok"]:
-            raise ValueError(f"boundary blend folds over: {q['problems']}")
     return params
+
+
+def _refuse_folds(patch, reach, where):
+    from software_defined_matter.sdf.boundary_blend_check import quality_report
+
+    q = quality_report(patch, reach)
+    if not q["ok"]:
+        raise ValueError(
+            f"boundary blend folds over{' ' + where if where else ''}: {q['problems']}"
+        )
+
+
+def check_boundary_blends(part, free_vec=None) -> dict[str, dict]:
+    """``quality_report`` for every boundary blend in ``part``, at the design
+    ``free_vec`` (default: the part's own parameter values).
+
+    The compiled closure keeps the topology it was planned with, so an
+    optimiser that moves the control points should call this at its
+    checkpoints. Keys are node paths (``materials[0].sdf_tree.children[1]``);
+    each value has ``ok`` and ``problems`` (a network that no longer plans,
+    e.g. guides that now cross twice, is reported there too). Not traceable:
+    it runs in numpy on concrete values.
+    """
+    from software_defined_matter.dsl.resolve import make_binding
+
+    binding = make_binding(part)
+    x = binding.initial_free_vector() if free_vec is None else jnp.asarray(free_vec)
+    out: dict[str, dict] = {}
+
+    def visit(value, path):
+        if isinstance(value, dict):
+            if value.get("type") == "primitive" and value.get("kind") == KIND:
+                out[path] = _report_at(value["params"], binding, x)
+            for k, v in value.items():
+                visit(v, f"{path}.{k}")
+        elif isinstance(value, list):
+            for i, v in enumerate(value):
+                visit(v, f"{path}[{i}]")
+
+    doc = part.to_dict()
+    for key in ("materials", "couplings"):
+        visit(doc.get(key) or [], key)
+    return out
+
+
+def _report_at(raw, binding, x):
+    from software_defined_matter.dsl.resolve import resolve_param_value
+    from software_defined_matter.sdf.boundary_blend_check import quality_report
+
+    geo = {
+        k: [np.asarray(resolve_param_value(c, binding, x)) for c in raw.get(k) or []]
+        for k in ("curves", "guides")
+    }
+    params = dict(raw) | geo
+    reach = raw.get("reach")
+    try:
+        patch = make_patch(params)
+    except ValueError as exc:
+        return {"ok": False, "problems": [str(exc)]}
+    return quality_report(patch, reach if reach is not None else 2.0 * _patch_size(geo))
 
 
 def _has_ref(c):
@@ -369,7 +519,7 @@ def _points(c):
     return np.asarray(c, dtype=float).tolist()
 
 
-def _check_chain(curves, tol=1e-6):
+def _check_chain(curves, tol=GAP_TOL):
     n = len(curves)
     for i in range(n):
         a, b = curves[i][-1], curves[(i + 1) % n][0]

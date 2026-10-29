@@ -156,7 +156,10 @@ def _normals(patch, reach, U, V):
 
 def _curvature(patch, u, v):
     """Principal curvatures (1/mm) at (u, v), from the two fundamental forms."""
-    f = lambda a: patch.S(a[0], a[1])  # noqa: E731
+
+    def f(a):
+        return patch.S(a[0], a[1])
+
     x = jnp.array([u, v])
     J = jax.jacfwd(f)(x)  # (3, 2)
     H = jax.hessian(f)(x)  # (3, 2, 2)

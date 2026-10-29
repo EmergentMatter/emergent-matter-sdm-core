@@ -25,6 +25,8 @@ checkout.
   Hermite flexure, exercising the new blend and its inverse capability.
   `minimal_0.6.sdm` adds the `shear_linear` deform introduced by that schema.
   `axis_warps_0.6.sdm` exercises `scale_axis` and `taper_linear` in the same version.
+  `minimal_0.7.sdm` cuts a `boundary_blend` skin from a `box` with a rounded edge
+  (`blend` / `blend_r`), the two additions that schema introduces.
   `assembly_mates_0.5.sdm` adds a grounded revolute mate referencing the port-bearing
   `minimal_0.5.sdm` part. It can be resolved as a complete assembly bundle.
 - `placement/` -- numerical expectations for assembly placement consumers.

@@ -959,7 +959,6 @@
                   "annular_sector",
                   "bellows",
                   "bezier_2d",
-                  "boundary_blend",
                   "box",
                   "box_2d",
                   "box_frame",
@@ -1271,106 +1270,6 @@
                 "const": "primitive"
               },
               "kind": {
-                "const": "boundary_blend"
-              }
-            },
-            "required": [
-              "type",
-              "kind"
-            ]
-          },
-          "then": {
-            "properties": {
-              "params": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "curves": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/$defs/scalarValue"
-                        },
-                        "minItems": 3,
-                        "maxItems": 3
-                      },
-                      "minItems": 1
-                    }
-                  },
-                  "conditions": {
-                    "type": "array",
-                    "items": {
-                      "enum": [
-                        "free",
-                        "normal",
-                        "tangent"
-                      ]
-                    }
-                  },
-                  "vectors": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/$defs/scalarValue"
-                      },
-                      "minItems": 3,
-                      "maxItems": 3
-                    }
-                  },
-                  "weights": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    }
-                  },
-                  "guides": {
-                    "type": "array",
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "type": "array",
-                        "items": {
-                          "$ref": "#/$defs/scalarValue"
-                        },
-                        "minItems": 3,
-                        "maxItems": 3
-                      },
-                      "minItems": 2
-                    }
-                  },
-                  "reach": {
-                    "$ref": "#/$defs/scalarValue"
-                  },
-                  "flip": {
-                    "type": "boolean"
-                  },
-                  "fold": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/$defs/scalarValue"
-                    },
-                    "minItems": 3,
-                    "maxItems": 3
-                  }
-                },
-                "required": [
-                  "curves"
-                ]
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "type": {
-                "const": "primitive"
-              },
-              "kind": {
                 "const": "box"
               }
             },
@@ -1392,16 +1291,6 @@
                     },
                     "minItems": 3,
                     "maxItems": 3
-                  },
-                  "blend": {
-                    "enum": [
-                      "sharp",
-                      "round",
-                      "chamfer"
-                    ]
-                  },
-                  "blend_r": {
-                    "$ref": "#/$defs/scalarValue"
                   }
                 },
                 "required": [
@@ -1595,16 +1484,6 @@
                     "$ref": "#/$defs/scalarValue"
                   },
                   "r": {
-                    "$ref": "#/$defs/scalarValue"
-                  },
-                  "blend": {
-                    "enum": [
-                      "sharp",
-                      "round",
-                      "chamfer"
-                    ]
-                  },
-                  "blend_r": {
                     "$ref": "#/$defs/scalarValue"
                   }
                 },
@@ -3028,18 +2907,7 @@
               "params": {
                 "type": "object",
                 "additionalProperties": false,
-                "properties": {
-                  "blend": {
-                    "enum": [
-                      "sharp",
-                      "round",
-                      "chamfer"
-                    ]
-                  },
-                  "blend_r": {
-                    "$ref": "#/$defs/scalarValue"
-                  }
-                }
+                "properties": {}
               }
             }
           }
@@ -3227,18 +3095,7 @@
               "params": {
                 "type": "object",
                 "additionalProperties": false,
-                "properties": {
-                  "blend": {
-                    "enum": [
-                      "sharp",
-                      "round",
-                      "chamfer"
-                    ]
-                  },
-                  "blend_r": {
-                    "$ref": "#/$defs/scalarValue"
-                  }
-                }
+                "properties": {}
               }
             }
           }
@@ -3263,18 +3120,7 @@
               "params": {
                 "type": "object",
                 "additionalProperties": false,
-                "properties": {
-                  "blend": {
-                    "enum": [
-                      "sharp",
-                      "round",
-                      "chamfer"
-                    ]
-                  },
-                  "blend_r": {
-                    "$ref": "#/$defs/scalarValue"
-                  }
-                }
+                "properties": {}
               }
             }
           }

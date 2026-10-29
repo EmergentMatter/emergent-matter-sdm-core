@@ -553,17 +553,22 @@ def test_sdf_node_versions_match_their_schema_introduction():
         wire.FIELD_PRIMITIVES,
         wire.FIELD_OPS,
     ]
-    added_in_0_6 = {"shear_linear", "taper_linear", "scale_axis", "boundary_blend"}
+    node_added = {
+        "shear_linear": "0.6",
+        "taper_linear": "0.6",
+        "scale_axis": "0.6",
+        "boundary_blend": "0.7",
+    }
     # Edge treatments: new optional params on nodes that are older.
-    params_added_in_0_6 = {"blend", "blend_r"}
+    params_added = {"blend": "0.7", "blend_r": "0.7"}
     for registry in registries:
         for spec in registry.values():
-            expected = "0.6" if spec.name in added_in_0_6 else "0.1"
+            expected = node_added.get(spec.name, "0.1")
             assert spec.since == expected, (
                 f"{spec.name}: expected since={expected!r}, got {spec.since!r}"
             )
             for p in spec.params:
-                p_expected = "0.6" if p.name in params_added_in_0_6 else expected
+                p_expected = params_added.get(p.name, expected)
                 assert p.since == p_expected, (
                     f"{spec.name}.{p.name}: expected since={p_expected!r}, got {p.since!r}"
                 )
@@ -590,7 +595,9 @@ def test_sdf_node_versions_match_their_schema_introduction():
 #              value every caller uses instead (is_lattice/removes_material/
 #              hollows/tiles feed the LATTICE_PRIMITIVES/SUBTRACT_OPS/
 #              HOLLOWING_MODIFIERS/TILING_TRANSFORMS frozensets
-#              sdf/envelope.py reads; required feeds
+#              sdf/envelope.py reads; unbounded/approximate_distance feed
+#              UNBOUNDED_PRIMITIVES (sdf/validate.py, sdf/bbox.py) and
+#              APPROXIMATE_DISTANCE_PRIMITIVES (sdf/lipschitz.py); required feeds
 #              NodeSpec.required_param_names(), which sdf/validate.py
 #              calls). The attribute access lives in wire.py either way;
 #              this is still a real reader, not a dead column.
@@ -605,7 +612,14 @@ _WIRE_SOURCE = (
 _VALIDATOR_SOURCE = (_SDF_DIR / "validate.py").read_text()
 
 _DIRECT_NODESPEC_FIELDS = ("name", "category", "params", "dim", "requires_field")
-_DERIVED_NODESPEC_FIELDS = ("is_lattice", "removes_material", "hollows", "tiles")
+_DERIVED_NODESPEC_FIELDS = (
+    "is_lattice",
+    "removes_material",
+    "hollows",
+    "tiles",
+    "unbounded",
+    "approximate_distance",
+)
 _DOCUMENTATION_ONLY_NODESPEC_FIELDS = ("since",)
 
 _DIRECT_PARAMSPEC_FIELDS = (

@@ -75,7 +75,7 @@ import jax.numpy as jnp
 import numpy as np
 
 MODES = ("free", "normal", "tangent")
-GAP_TOL = 1e-3  # mm: guides must cross / land this close (the disagreement is averaged)
+GAP_TOL = 1e-3  # mm: curve ends must meet, and guides cross / land, this close
 _EPS = 1e-9
 
 
@@ -237,7 +237,10 @@ def _refine_on(ctrl, q, s0, iters=8):
     """Parameter on a Bezier nearest point q, refined from s0 (Gauss-Newton,
     JAX: it moves smoothly with the curve and q)."""
     s = jnp.asarray(s0, dtype=float)
-    f = lambda t: bezier(ctrl, t)  # noqa: E731
+
+    def f(t):
+        return bezier(ctrl, t)
+
     df = jax.jacfwd(f)
     for _ in range(iters):
         r, d = f(s) - q, df(s)
@@ -247,8 +250,13 @@ def _refine_on(ctrl, q, s0, iters=8):
 
 def _refine_cross(ca, cb, a0, b0, iters=8):
     """Where two Bezier curves cross, refined from (a0, b0) (Gauss-Newton, JAX)."""
-    fa = lambda t: bezier(ca, t)  # noqa: E731
-    fb = lambda t: bezier(cb, t)  # noqa: E731
+
+    def fa(t):
+        return bezier(ca, t)
+
+    def fb(t):
+        return bezier(cb, t)
+
     da, db = jax.jacfwd(fa), jax.jacfwd(fb)
     a, b = jnp.asarray(a0, dtype=float), jnp.asarray(b0, dtype=float)
     for _ in range(iters):
@@ -352,7 +360,7 @@ class Patch:
         n = len(C)
         for k in range(n):
             gap = float(np.linalg.norm(C[k][-1] - C[(k + 1) % n][0]))
-            if gap > 1e-6:
+            if gap > GAP_TOL:
                 raise ValueError(
                     f"curve {k + 1} ends {gap:.3g} mm from where curve {(k + 1) % n + 1} "
                     "starts: the loop must run head to tail"
@@ -365,6 +373,10 @@ class Patch:
         for k, (mode, c) in enumerate(zip(modes, C, strict=True)):
             if mode not in MODES:
                 raise ValueError(f"curve {k + 1}: condition {mode!r} not in {MODES}")
+            if mode != "free" and not np.any(np.asarray(vecs[k], float)):
+                raise ValueError(
+                    f"curve {k + 1}: a {mode!r} condition needs a direction, got a zero vector"
+                )
             if mode == "tangent":
                 nrm = np.asarray(vecs[k], float)
                 nrm = nrm / np.linalg.norm(nrm)
@@ -693,8 +705,17 @@ class Patch:
             for j in (0, 1):
                 s, t = jnp.abs(u - i), jnp.abs(v - j)
                 # on side u=i take the twist the u-side implies, on side v=j
-                # the v-side's, blended between: both sides exact
-                W[(i, j)] = (s * self.tw_f[(i, j)] + t * self.tw_e[(i, j)]) / (s + t + 1e-12)
+                # the v-side's, blended between: both sides exact. At the
+                # corner itself (s = t = 0, where the extension past a corner
+                # reads S) take the mean, through a safe denominator: dividing
+                # by s + t + eps there gave derivatives of order eps^-3, which
+                # overflow to inf and turn a zero tangent into NaN.
+                d = s + t
+                at_corner = d < 1e-9
+                safe_d = jnp.where(at_corner, 1.0, d)
+                blend = (s * self.tw_f[(i, j)] + t * self.tw_e[(i, j)]) / safe_d
+                mean = 0.5 * (self.tw_f[(i, j)] + self.tw_e[(i, j)])
+                W[(i, j)] = jnp.where(at_corner, mean, blend)
         return W
 
     def S(self, u, v):

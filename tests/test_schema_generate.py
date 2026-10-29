@@ -20,6 +20,7 @@ _CONFORMANCE_DIR = _SCHEMA_DIR / "conformance"
 # Frozen released artifacts, pinned by hash rather than re-derived: a test
 # that regenerated these to compare would defeat the point of freezing them.
 _FROZEN_SHA256 = {
+    "sdm-0.6.schema.json": "2dc5466f5e2d0741c80db83c6bee0183f5487ad813699ce7e4d775d3ae818ea6",
     "sdm-0.5.schema.json": "541de9dc2bd356468b6c772cfdd6891bdc65154b68a004ad68de7c724738f806",
     "sdm-0.4.schema.json": "0ebcc66b2bd1781b8a779fe61f9cf9aaadf3811bfde497952d185aa30ce9e636",
     "sdm-0.3.schema.json": "a6e73d81f437df0ccf83635198a1cdd99d57536afa4781e5e866bd9d90db344f",
@@ -39,7 +40,7 @@ def _sha256(path: Path) -> str:
 
 def test_generated_schema_matches_the_committed_file():
     generated = json.dumps(_generate.generate_schema(), indent=2) + "\n"
-    committed = (_SCHEMA_DIR / "sdm-0.6.schema.json").read_text()
+    committed = (_SCHEMA_DIR / "sdm-0.7.schema.json").read_text()
     assert generated == committed
 
 
@@ -53,7 +54,7 @@ def test_write_generated_files_touches_only_the_current_version(tmp_path):
     """The frozen schemas have no counterpart in tmp_path at all --
     write_generated_files never has a path to write them through."""
     _generate.write_generated_files(tmp_path)
-    assert {p.name for p in tmp_path.iterdir()} == {"sdm-0.6.schema.json", "index.json"}
+    assert {p.name for p in tmp_path.iterdir()} == {"sdm-0.7.schema.json", "index.json"}
 
 
 # ---------------------------------------------------------------------------
@@ -75,7 +76,7 @@ def test_frozen_schema_is_untouched(filename):
 
 def test_index_lists_every_known_version_with_latest_pinned():
     index = _generate.generate_index()
-    assert index["latest"] == "0.6"
+    assert index["latest"] == "0.7"
     assert set(index["versions"]) == set(wire.SCHEMA_VERSIONS)
     for version in wire.SCHEMA_VERSIONS:
         assert index["versions"][version]["file"] == f"sdm-{version}.schema.json"
@@ -101,7 +102,7 @@ def test_index_0_3_additions_are_expr_and_probabilistic_param_fields():
 
 def _fixture(name: str) -> dict:
     doc = json.loads((_CONFORMANCE_DIR / name).read_text())
-    doc["schema_version"] = "0.6"
+    doc["schema_version"] = "0.7"
     if doc.get("couplings") == []:
         del doc["couplings"]
     return doc
@@ -201,7 +202,7 @@ def test_schema_cli_index_flag_prints_the_version_index():
     )
     assert result.returncode == 0
     payload = json.loads(result.stdout)
-    assert payload["latest"] == "0.6"
+    assert payload["latest"] == "0.7"
 
 
 def test_schema_cli_index_missing_file_fails_loud(monkeypatch, tmp_path, capsys):

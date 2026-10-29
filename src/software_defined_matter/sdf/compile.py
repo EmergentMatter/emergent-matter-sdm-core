@@ -124,6 +124,7 @@ def make_sdf_closure(
     *,
     b_smooth_csg: bool | None = None,
     d_smooth_k: float = 0.25,
+    b_implicit_foot: bool = False,
 ) -> SDFEvaluator:
     """Return a ``(points, free_vec) -> distance`` closure for ``tree``.
 
@@ -135,6 +136,12 @@ def make_sdf_closure(
         b_smooth_csg: If ``None`` (default), reads
             ``part.metadata.get("smooth_csg", False)``. Pass ``True`` or
             ``False`` to override the metadata value.
+        b_implicit_foot: Differentiate each ``boundary_blend``'s foot point
+            implicitly, so the normal's derivative and the spatial Hessian
+            are exact. Off by default: first derivatives of the distance
+            (what the metrics and meshing read) are exact without it, and it
+            makes gradients slower to compile and run. See
+            :mod:`software_defined_matter.sdf.sdf_boundary_blend`.
     """
     if b_smooth_csg is None:
         b_smooth_csg = bool(part.metadata.get("smooth_csg", False))
@@ -144,6 +151,7 @@ def make_sdf_closure(
         binding,
         b_smooth_csg=b_smooth_csg,
         d_smooth_k=d_smooth_k,
+        b_implicit_foot=b_implicit_foot,
     )
 
     def evaluate_sdf(points: jnp.ndarray, free_vec: jnp.ndarray | None = None) -> jnp.ndarray:
@@ -165,6 +173,7 @@ def make_sdf_closure_with_binding(
     *,
     b_smooth_csg: bool | None = None,
     d_smooth_k: float = 0.25,
+    b_implicit_foot: bool = False,
 ) -> SDFEvaluator:
     """Like :func:`make_sdf_closure` but reuses an existing :class:`ParamBinding`.
 
@@ -177,7 +186,8 @@ def make_sdf_closure_with_binding(
     ``b_smooth_csg=None`` resolves to ``False`` here because no ``Part`` is
     available to consult metadata. Pass ``True`` explicitly or prefer
     :func:`make_sdf_closure` (which reads ``part.metadata["smooth_csg"]``)
-    when metadata-driven behaviour is desired.
+    when metadata-driven behaviour is desired. ``b_implicit_foot`` is as in
+    :func:`make_sdf_closure`.
     """
     if b_smooth_csg is None:
         b_smooth_csg = False
@@ -186,6 +196,7 @@ def make_sdf_closure_with_binding(
         binding,
         b_smooth_csg=b_smooth_csg,
         d_smooth_k=d_smooth_k,
+        b_implicit_foot=b_implicit_foot,
     )
 
     def evaluate_sdf(points: jnp.ndarray, free_vec: jnp.ndarray | None = None) -> jnp.ndarray:
@@ -212,19 +223,21 @@ def _compile_node(
     *,
     b_smooth_csg: bool,
     d_smooth_k: float,
+    b_implicit_foot: bool,
 ) -> SDFClosure:
     if not isinstance(node, dict) or "type" not in node:
         raise ValueError(f"Not an SDF node: {node!r}")
 
     kind = node["type"]
     if kind == "primitive":
-        return _compile_primitive(node, binding)
+        return _compile_primitive(node, binding, b_implicit_foot=b_implicit_foot)
     if kind == "op":
         return _compile_op(
             node,
             binding,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
+            b_implicit_foot=b_implicit_foot,
         )
     if kind == "transform":
         return _compile_transform(
@@ -232,6 +245,7 @@ def _compile_node(
             binding,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
+            b_implicit_foot=b_implicit_foot,
         )
     if kind == "modifier":
         return _compile_modifier(
@@ -239,6 +253,7 @@ def _compile_node(
             binding,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
+            b_implicit_foot=b_implicit_foot,
         )
     if kind == "deform":
         return _compile_deform(
@@ -246,6 +261,7 @@ def _compile_node(
             binding,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
+            b_implicit_foot=b_implicit_foot,
         )
     if kind == "2d_to_3d":
         return _compile_2d_to_3d(
@@ -253,6 +269,7 @@ def _compile_node(
             binding,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
+            b_implicit_foot=b_implicit_foot,
         )
     if kind == "loft":
         return _compile_loft(
@@ -260,6 +277,7 @@ def _compile_node(
             binding,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
+            b_implicit_foot=b_implicit_foot,
         )
     if kind == "sweep":
         return _compile_sweep(
@@ -267,6 +285,7 @@ def _compile_node(
             binding,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
+            b_implicit_foot=b_implicit_foot,
         )
     raise ValueError(f"Unknown SDF node type {kind!r}")
 
@@ -275,7 +294,9 @@ def _primitive_kwargs(node: dict[str, Any]) -> dict[str, Any]:
     return node.get("params") or {}
 
 
-def _compile_primitive(node: dict[str, Any], binding: ParamBinding) -> SDFClosure:
+def _compile_primitive(
+    node: dict[str, Any], binding: ParamBinding, *, b_implicit_foot: bool
+) -> SDFClosure:
     kind = node["kind"]
     if kind not in _PRIMITIVES:
         raise ValueError(f"Unknown primitive {kind!r}")
@@ -284,7 +305,7 @@ def _compile_primitive(node: dict[str, Any], binding: ParamBinding) -> SDFClosur
     if kind == "boundary_blend":
         from software_defined_matter.sdf.sdf_boundary_blend import compile_boundary_blend
 
-        return compile_boundary_blend(node, binding)
+        return compile_boundary_blend(node, binding, implicit_foot=b_implicit_foot)
     prim_fn = _PRIMITIVES[kind]
     raw_kwargs = dict(_primitive_kwargs(node))
     # Structural strings and flags (e.g. a box's `blend`) choose code paths,
@@ -385,10 +406,17 @@ def _compile_op(
     *,
     b_smooth_csg: bool,
     d_smooth_k: float,
+    b_implicit_foot: bool,
 ) -> SDFClosure:
     op_name = node["op"]
     children: list[SDFClosure] = [
-        _compile_node(c, binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+        _compile_node(
+            c,
+            binding,
+            b_smooth_csg=b_smooth_csg,
+            d_smooth_k=d_smooth_k,
+            b_implicit_foot=b_implicit_foot,
+        )
         for c in node["children"]
     ]
     if not children:
@@ -494,9 +522,16 @@ def _compile_transform(
     *,
     b_smooth_csg: bool,
     d_smooth_k: float,
+    b_implicit_foot: bool,
 ) -> SDFClosure:
     tf_name = node["transform"]
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = _compile_node(
+        node["child"],
+        binding,
+        b_smooth_csg=b_smooth_csg,
+        d_smooth_k=d_smooth_k,
+        b_implicit_foot=b_implicit_foot,
+    )
     raw_kwargs = _op_kwargs(node)
 
     if tf_name == "translate":
@@ -650,9 +685,16 @@ def _compile_modifier(
     *,
     b_smooth_csg: bool,
     d_smooth_k: float,
+    b_implicit_foot: bool,
 ) -> SDFClosure:
     name = node["modifier"]
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = _compile_node(
+        node["child"],
+        binding,
+        b_smooth_csg=b_smooth_csg,
+        d_smooth_k=d_smooth_k,
+        b_implicit_foot=b_implicit_foot,
+    )
     raw_kwargs = _op_kwargs(node)
 
     if name == "round":
@@ -688,9 +730,16 @@ def _compile_deform(
     *,
     b_smooth_csg: bool,
     d_smooth_k: float,
+    b_implicit_foot: bool,
 ) -> SDFClosure:
     name = node["deform"]
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = _compile_node(
+        node["child"],
+        binding,
+        b_smooth_csg=b_smooth_csg,
+        d_smooth_k=d_smooth_k,
+        b_implicit_foot=b_implicit_foot,
+    )
     raw_kwargs = _op_kwargs(node)
 
     if name == "twist":
@@ -789,9 +838,16 @@ def _compile_2d_to_3d(
     *,
     b_smooth_csg: bool,
     d_smooth_k: float,
+    b_implicit_foot: bool,
 ) -> SDFClosure:
     method = node["method"]
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = _compile_node(
+        node["child"],
+        binding,
+        b_smooth_csg=b_smooth_csg,
+        d_smooth_k=d_smooth_k,
+        b_implicit_foot=b_implicit_foot,
+    )
     raw_kwargs = _op_kwargs(node)
 
     if method == "revolution":
@@ -844,11 +900,18 @@ def _compile_loft(
     *,
     b_smooth_csg: bool,
     d_smooth_k: float,
+    b_implicit_foot: bool,
 ) -> SDFClosure:
     """Loft N 2D cross-section children along Z at the stations in ``params['z']``
     (see :func:`software_defined_matter.sdf.sdf_ops.loft`)."""
     children = [
-        _compile_node(c, binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+        _compile_node(
+            c,
+            binding,
+            b_smooth_csg=b_smooth_csg,
+            d_smooth_k=d_smooth_k,
+            b_implicit_foot=b_implicit_foot,
+        )
         for c in node["children"]
     ]
     if len(children) < 2:
@@ -931,8 +994,15 @@ def _compile_sweep(
     *,
     b_smooth_csg: bool,
     d_smooth_k: float,
+    b_implicit_foot: bool,
 ) -> SDFClosure:
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = _compile_node(
+        node["child"],
+        binding,
+        b_smooth_csg=b_smooth_csg,
+        d_smooth_k=d_smooth_k,
+        b_implicit_foot=b_implicit_foot,
+    )
     raw_kwargs = _op_kwargs(node)
     if "path" not in raw_kwargs:
         raise ValueError("sweep requires a 'path' param: a list of [x, y, z] control points")

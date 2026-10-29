@@ -28,7 +28,7 @@ from software_defined_matter.ports import Port, scalar_refs
 
 # The newest schema_version this package emits and validates against by
 # default. Distinct from the package's own version (0.3.0 today).
-LATEST_SCHEMA_VERSION = "0.6"
+LATEST_SCHEMA_VERSION = "0.7"
 
 # Fallback when a document's schema_version is missing or unrecognised.
 # 0.1's `schema_version` property is a permissive pattern rather than a
@@ -39,7 +39,7 @@ FALLBACK_SCHEMA_VERSION = "0.1"
 # Every version this package can load and validate. Absent `prior` /
 # `tolerance` means a delta at the authored value, so 0.1 and 0.2 documents
 # load unchanged; 0.3 is a pure superset.
-KNOWN_SCHEMA_VERSIONS = ("0.1", "0.2", "0.3", "0.4", "0.5", "0.6")
+KNOWN_SCHEMA_VERSIONS = ("0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7")
 
 # Capability -> the schema_version that introduced it; min_schema_version_for
 # takes the newest entry among the capabilities a part actually uses.
@@ -56,9 +56,9 @@ _CAPABILITY_MIN_VERSION: dict[str, str] = {
     "shear_linear": "0.6",
     "taper_linear": "0.6",
     "scale_axis": "0.6",
-    "boundary_blend": "0.6",
+    "boundary_blend": "0.7",
     # `blend` on union / intersect / subtract / box / capped_cylinder
-    "edge_blend": "0.6",
+    "edge_blend": "0.7",
     "param_expr": "0.3",
     "prior_params": "0.3",
 }

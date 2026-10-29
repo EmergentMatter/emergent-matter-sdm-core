@@ -83,7 +83,7 @@ WIRE_SHAPES: tuple[WireShape, ...] = get_args(WireShape)
 #: with ``model.KNOWN_SCHEMA_VERSIONS`` by ``test_wire_contract.py``, not by
 #: import, so this module never needs the version-ordering machinery in
 #: ``model.py`` to describe a static fact about when a field was added.
-SchemaVersion = Literal["0.1", "0.2", "0.3", "0.4", "0.5", "0.6"]
+SchemaVersion = Literal["0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7"]
 SCHEMA_VERSIONS: tuple[SchemaVersion, ...] = get_args(SchemaVersion)
 
 #: Versioned additions inside static kinematics schema definitions.
@@ -248,6 +248,8 @@ _COLUMN_OWNER: dict[str, NodeCategory] = {
     "hollows": "modifier",
     "tiles": "transform",
     "requires_field": "deform",
+    "unbounded": "primitive",
+    "approximate_distance": "primitive",
 }
 
 
@@ -267,6 +269,11 @@ class NodeSpec:
         (``onion``); its envelope is the solid it was hollowed from.
       - ``tiles``: a transform that repeats a child through a finite
         domain (``repeat_finite``); its envelope is that domain.
+      - ``unbounded``: a primitive that extends forever (``plane``). It has
+        no bbox of its own and is valid only as a CSG cutting tool.
+      - ``approximate_distance``: a primitive whose value is a signed field
+        but not a guaranteed distance (rate <= 1 is not promised), so
+        ``sdf.lipschitz`` reports it as UNKNOWN.
 
     Each column is meaningful only for the category it names in
     ``_COLUMN_OWNER``; set on any other category it raises.
@@ -282,6 +289,8 @@ class NodeSpec:
     hollows: bool = False
     tiles: bool = False
     requires_field: bool = False
+    unbounded: bool = False
+    approximate_distance: bool = False
 
     def __post_init__(self) -> None:
         if not self.name:
@@ -327,8 +336,8 @@ PRIMITIVES: dict[str, NodeSpec] = {
     )),
     "box": NodeSpec("box", "primitive", dim=3, params=(
         ParamSpec("b", True, "vec3"),
-        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.6"),
-        ParamSpec("blend_r", False, "scalar", since="0.6"),
+        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.7"),
+        ParamSpec("blend_r", False, "scalar", since="0.7"),
     )),
     "round_box": NodeSpec("round_box", "primitive", dim=3, params=(
         ParamSpec("b", True, "vec3"),
@@ -373,7 +382,7 @@ PRIMITIVES: dict[str, NodeSpec] = {
         ParamSpec("c", True, "vec2"),
         ParamSpec("h", True, "scalar"),
     )),
-    "plane": NodeSpec("plane", "primitive", dim=3, params=(
+    "plane": NodeSpec("plane", "primitive", dim=3, unbounded=True, params=(
         ParamSpec("n", True, "vec3"),
         ParamSpec("h", True, "scalar"),
     )),
@@ -382,16 +391,17 @@ PRIMITIVES: dict[str, NodeSpec] = {
     # tool. One entry per curve in `conditions` / `vectors` / `weights`; any
     # number of `guides`. Curve / guide control points may be $refs
     # (differentiable); everything else is structural (literal).
-    "boundary_blend": NodeSpec("boundary_blend", "primitive", dim=3, since="0.6", params=(
-        ParamSpec("curves", True, "point_list_list", point_dim=3, min_points=1, since="0.6"),
+    "boundary_blend": NodeSpec("boundary_blend", "primitive", dim=3, since="0.7",
+                               unbounded=True, approximate_distance=True, params=(
+        ParamSpec("curves", True, "point_list_list", point_dim=3, min_points=1, since="0.7"),
         ParamSpec("conditions", False, "string_list", ref_ok=False,
-                  choices=("free", "normal", "tangent"), since="0.6"),
-        ParamSpec("vectors", False, "point_list", ref_ok=False, point_dim=3, since="0.6"),
-        ParamSpec("weights", False, "scalar_list", ref_ok=False, since="0.6"),
-        ParamSpec("guides", False, "point_list_list", point_dim=3, min_points=2, since="0.6"),
-        ParamSpec("reach", False, "scalar", ref_ok=False, since="0.6"),
-        ParamSpec("flip", False, "bool", ref_ok=False, since="0.6"),
-        ParamSpec("fold", False, "vec3", ref_ok=False, since="0.6"),
+                  choices=("free", "normal", "tangent"), since="0.7"),
+        ParamSpec("vectors", False, "point_list", ref_ok=False, point_dim=3, since="0.7"),
+        ParamSpec("weights", False, "scalar_list", ref_ok=False, since="0.7"),
+        ParamSpec("guides", False, "point_list_list", point_dim=3, min_points=2, since="0.7"),
+        ParamSpec("reach", False, "scalar", ref_ok=False, since="0.7"),
+        ParamSpec("flip", False, "bool", ref_ok=False, since="0.7"),
+        ParamSpec("fold", False, "vec3", ref_ok=False, since="0.7"),
     )),
     # Sampled distance grid (DR-0003). Topology-class slots are ref_ok=False:
     # changing them selects how many samples exist, so they require re-emit.
@@ -419,8 +429,8 @@ PRIMITIVES: dict[str, NodeSpec] = {
     "capped_cylinder": NodeSpec("capped_cylinder", "primitive", dim=3, params=(
         ParamSpec("h", True, "scalar"),
         ParamSpec("r", True, "scalar"),
-        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.6"),
-        ParamSpec("blend_r", False, "scalar", since="0.6"),
+        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.7"),
+        ParamSpec("blend_r", False, "scalar", since="0.7"),
     )),
     "rounded_cylinder": NodeSpec("rounded_cylinder", "primitive", dim=3, params=(
         ParamSpec("ra", True, "scalar"),
@@ -546,6 +556,16 @@ PRIMITIVES: dict[str, NodeSpec] = {
 #: replaces each with the box it was designed to fill.
 LATTICE_PRIMITIVES = frozenset(name for name, spec in PRIMITIVES.items() if spec.is_lattice)
 
+#: Primitives that extend forever: no bbox of their own, and valid only as a
+#: CSG cutting tool (``sdf/validate.py``).
+UNBOUNDED_PRIMITIVES = frozenset(name for name, spec in PRIMITIVES.items() if spec.unbounded)
+
+#: Primitives whose value is not a guaranteed distance: ``sdf/lipschitz.py``
+#: claims no rate bound for them.
+APPROXIMATE_DISTANCE_PRIMITIVES = frozenset(
+    name for name, spec in PRIMITIVES.items() if spec.approximate_distance
+)
+
 # ===========================================================================
 # CSG ops
 # ===========================================================================
@@ -554,16 +574,16 @@ OPS: dict[str, NodeSpec] = {
     # `blend` / `blend_r`: how the faces meet at the edges the boolean makes
     # (sdf/sdf_edge_blends.py); absent = sharp, as before.
     "union": NodeSpec("union", "op", params=(
-        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.6"),
-        ParamSpec("blend_r", False, "scalar", since="0.6"),
+        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.7"),
+        ParamSpec("blend_r", False, "scalar", since="0.7"),
     )),
     "subtract": NodeSpec("subtract", "op", removes_material=True, params=(
-        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.6"),
-        ParamSpec("blend_r", False, "scalar", since="0.6"),
+        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.7"),
+        ParamSpec("blend_r", False, "scalar", since="0.7"),
     )),
     "intersect": NodeSpec("intersect", "op", params=(
-        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.6"),
-        ParamSpec("blend_r", False, "scalar", since="0.6"),
+        ParamSpec("blend", False, "string", ref_ok=False, choices=_BLENDS, since="0.7"),
+        ParamSpec("blend_r", False, "scalar", since="0.7"),
     )),
     "smooth_union": NodeSpec("smooth_union", "op", params=(
         ParamSpec("k", True, "scalar"),
