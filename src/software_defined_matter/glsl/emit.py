@@ -1669,7 +1669,10 @@ class _GLSLEmitter:
 
 # fmt: off
 _EXPR_UNARY: dict[str, Callable[[str], str]] = {
-    "neg":    lambda x: f"(-{x})",
+    # The space matters: a negative literal child is emitted bare (`-1.5`),
+    # and `(--1.5)` is GLSL's decrement operator on a constant, which does
+    # not compile. `(- -1.5)` is the number.
+    "neg":    lambda x: f"(- {x})",
     "abs":    lambda x: f"abs({x})",
     "sqrt":   lambda x: f"sqrt({x})",
     "log":    lambda x: f"log({x})",
