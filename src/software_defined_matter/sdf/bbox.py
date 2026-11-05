@@ -137,7 +137,28 @@ def _infer_node_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BB
         return _infer_deform_bbox(node, intervals)
     if node_type == "sweep":
         return _infer_sweep_bbox(node, intervals)
+    if node_type == "extension":
+        return _infer_extension_bbox(node, intervals)
     raise UnsupportedSDFNodeError(f"Unknown node type {node_type!r}")
+
+
+def _infer_extension_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox:
+    """A registered extension bounds itself; otherwise its fallback is bounded."""
+    from software_defined_matter import extensions
+
+    spec = extensions.lookup(node)
+    if spec is None:
+        return _infer_node_bbox(node["fallback"], intervals)
+    return spec.bbox(
+        node,
+        extensions.BBoxContext(
+            intervals=intervals,
+            bbox=lambda tree: _infer_node_bbox(tree, intervals),
+            bbox_2d_primitive=lambda tree: _infer_2d_primitive_bbox(tree, intervals),
+            vec_intervals=lambda value, n: _vec_intervals(value, n, intervals),
+            scalar_abs_max=lambda value: _scalar_abs_max(value, intervals),
+        ),
+    )
 
 
 def _primitive_kwargs(node: dict[str, Any]) -> dict[str, Any]:

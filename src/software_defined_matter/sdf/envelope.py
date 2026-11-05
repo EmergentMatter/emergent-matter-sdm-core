@@ -152,6 +152,21 @@ def _node_envelope(node: Any, part: Part) -> SDFTree:
         out["children"] = [_node_envelope(c, part) for c in node.get("children") or []]
         return out
 
+    if node_type == "extension":
+        from software_defined_matter import extensions
+
+        spec = extensions.lookup(node)
+        if spec is None:
+            return _node_envelope(node["fallback"], part)
+        if spec.envelope is None:
+            raise EnvelopeInferenceError(
+                f"extension {node.get('id')!r} defines no envelope rule; "
+                "pass an explicit `envelope=` to the metric."
+            )
+        return spec.envelope(
+            node, extensions.EnvelopeContext(part=part, envelope=lambda t: _node_envelope(t, part))
+        )
+
     raise EnvelopeInferenceError(
         f"Unknown node type {node_type!r}; no envelope rule for it. "
         "Add one in software_defined_matter.sdf.envelope."
