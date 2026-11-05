@@ -26,6 +26,7 @@ import contextlib
 import copy
 import json
 import math
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -273,8 +274,8 @@ class GLSLEmission:
     - ``"live"``: the param bound a ``u_p_*`` uniform (a ``$ref`` in a
                   supported slot); scrub it with zero recompilation.
     - ``"derived"``: the param carries a relation (``Param.expr``). It has no
-                  uniform of its own: the emitter expanded the relation
-                  inline over its base params' uniforms, so the value
+                  uniform of its own: the emitter computes the relation
+                  from its base params' uniforms, so the value
                   follows them live and cannot go stale. The entry carries
                   ``expr`` and ``sources`` (immediate dependencies) so a
                   viewer can show the number read-only and recompute it
@@ -370,6 +371,7 @@ class _GLSLEmitter:
         smooth_csg: bool,
         smooth_k: float,
         poly_lod: int | None = None,
+        factor_relations: bool = False,
     ) -> None:
         self.part = part
         self.smooth_csg = smooth_csg
@@ -378,6 +380,15 @@ class _GLSLEmitter:
         # curvature-resampled down to it before emission. None = never touch.
         self.poly_lod = poly_lod
         self.uniforms: dict[str, UniformDecl] = {}  # keyed by source_param
+        self._uniform_names: set[str] = set()
+        self.factor_relations = factor_relations
+        self._relation_names = part.derived_order() if factor_relations else []
+        self._relation_symbols = {
+            name: f"sdm_rel_{i}" for i, name in enumerate(self._relation_names)
+        }
+        self._relation_dependencies: dict[int, set[int]] = {}
+        self._relation_expressions: dict[int, str] = {}
+        self._relation_indices = {name: i for i, name in enumerate(self._relation_names)}
         self.functions: list[str] = []
         self._next_id = 0
         # Largest polygon_2d vertex count seen; sizes the shared sdf_polygon_2d
@@ -413,8 +424,45 @@ class _GLSLEmitter:
         return f"field_n{n}"
 
     def _emit_function(self, signature: str, body_lines: list[str]) -> None:
+        if self.factor_relations:
+            body_lines = [*self._relation_declarations(body_lines), *body_lines]
         body = "\n".join(f"    {ln}" for ln in body_lines)
         self.functions.append(f"{signature} {{\n{body}\n}}")
+
+    def _relation_declarations(self, body_lines: list[str]) -> list[str]:
+        """Evaluate each required relation once in this function's local scope.
+
+        Relations depend only on design uniforms, never on the query point.
+        Keeping shared nodes as ordered assignments avoids exponential source
+        expansion without requiring host updates or mutable shader globals.
+        Every emitted function remains independently callable.
+        """
+        from software_defined_matter.dsl.expr import expr_param_names
+
+        pending = [
+            int(index) for line in body_lines for index in re.findall(r"\bsdm_rel_(\d+)\b", line)
+        ]
+        required: set[int] = set()
+        while pending:
+            index = pending.pop()
+            if index in required:
+                continue
+            required.add(index)
+            if index not in self._relation_dependencies:
+                relation = self.part.params[self._relation_names[index]].expr
+                self._relation_dependencies[index] = {
+                    self._relation_indices[name]
+                    for name in expr_param_names(relation)
+                    if name in self._relation_indices
+                }
+            pending.extend(self._relation_dependencies[index] - required)
+        declarations = []
+        for index in sorted(required):
+            if index not in self._relation_expressions:
+                relation = self.part.params[self._relation_names[index]].expr
+                self._relation_expressions[index] = self._emit_expr(relation)
+            declarations.append(f"float sdm_rel_{index} = {self._relation_expressions[index]};")
+        return declarations
 
     # -- Uniform / literal resolution -----------------------------------
 
@@ -438,7 +486,16 @@ class _GLSLEmitter:
                 f"cannot bind a uniform. Emit it via _emit_param_ref, which "
                 f"expands it to arithmetic over its base params' uniforms."
             )
-        uname = f"u_p_{param_name}"
+        # GLSL reserves double underscores, including inside an identifier.
+        # Parameter identity stays in UniformDecl; only the shader spelling
+        # changes, and distinct names that sanitize alike still need inputs.
+        stem = re.sub(r"_+", "_", re.sub(r"[^a-zA-Z0-9_]", "_", param_name)).strip("_")
+        base = f"u_p_{stem or 'param'}"
+        uname, suffix = base, 2
+        while uname in self._uniform_names:
+            uname = f"{base}_{suffix}"
+            suffix += 1
+        self._uniform_names.add(uname)
         self.uniforms[param_name] = UniformDecl(
             name=uname,
             glsl_type="float",
@@ -452,12 +509,10 @@ class _GLSLEmitter:
     def _emit_param_ref(self, param_name: str, _stack: tuple[str, ...] = ()) -> str:
         """A parameter reference as a float-typed GLSL expression.
 
-        A plain param becomes its uniform. A param carrying a relation becomes
-        that relation, EXPANDED — recursively, so a chain
-        ``a -> b -> free`` lands as arithmetic over ``free``'s uniform.
-        Expansion rather than a per-relation uniform is what makes a derived
-        dimension follow its base params live: there is no second value that
-        could be stale, because there is no second value.
+        A plain param becomes its uniform. Function emission names a derived
+        relation's local temporary; standalone expression emission expands it.
+        Both compute from current base uniforms, so a derived dimension never
+        receives a separate uniform that a host could leave stale.
         """
         if param_name not in self.part.params:
             raise KeyError(
@@ -467,6 +522,8 @@ class _GLSLEmitter:
         p = self.part.params[param_name]
         if p.expr is None:
             return self._add_uniform(param_name)
+        if self.factor_relations:
+            return self._relation_symbols[param_name]
         if param_name in _stack:
             # Unreachable on any loaded part — validate refuses a cyclic
             # relation DAG, and ParamBinding re-checks for in-memory parts.
@@ -1724,9 +1781,13 @@ def _motion_expressions(emitter: _GLSLEmitter) -> _MotionExpressionEmitter:
     block = emitter.part.kinematics
     assert block is not None
     expressions = _MotionExpressionEmitter(
-        emitter.part, smooth_csg=emitter.smooth_csg, smooth_k=emitter.smooth_k
+        emitter.part,
+        smooth_csg=emitter.smooth_csg,
+        smooth_k=emitter.smooth_k,
+        factor_relations=emitter.factor_relations,
     )
     expressions.uniforms = emitter.uniforms
+    expressions._uniform_names = emitter._uniform_names
     expressions.dof_expressions = {
         dof["name"]: f"(u_dof_{i} * {_float_literal(math.pi / 180)})"
         if dof["unit"] == "deg"
@@ -2155,7 +2216,13 @@ def emit_glsl(
         raise ValueError(f"poly_lod must be >= 3 (a polygon), got {poly_lod}")
 
     _stage("glsl-walk")
-    emitter = _GLSLEmitter(part, smooth_csg=smooth_csg, smooth_k=smooth_k, poly_lod=poly_lod)
+    emitter = _GLSLEmitter(
+        part,
+        smooth_csg=smooth_csg,
+        smooth_k=smooth_k,
+        poly_lod=poly_lod,
+        factor_relations=True,
+    )
     # Pre-scan for the largest polygon_2d so every emitted V[] can be sized to
     # a single SDM_POLY_MAX_N that also types sdf_polygon_2d's array parameter.
     # LOD-aware, so the shared array is sized to what actually gets emitted.
