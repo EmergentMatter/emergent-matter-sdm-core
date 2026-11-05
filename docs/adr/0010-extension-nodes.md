@@ -15,7 +15,7 @@ Schema 0.7 adds one node type, `extension`:
  "payload": {}, "children": [], "children_dim": 3, "fallback": {}}
 ```
 
-- `id` names the kind. The prefix `em.` is reserved for Emergent Matter packages.
+- `id` names the kind. The prefix `em.` is a naming convention for Emergent Matter packages; nothing enforces it.
 - `version` is the version of that kind's own payload shape.
 - `payload` is an object this package never interprets. It only finds the `$ref` leaves in it, so a payload may refer to parameters, and it keeps the object unchanged.
 - `children` are ordinary SDF subtrees of dimension `children_dim`.
@@ -27,7 +27,7 @@ Where no spec is registered for a node's `id` and `version`, every consumer uses
 
 Using any extension node raises a part's minimum schema version to 0.7. Nothing else about saving changes: parts without an extension write the same bytes as before, and saving never consults the registry.
 
-A kind this package later makes native is recorded in `extensions.PROMOTIONS` with a function that converts its payload. Reading converts such nodes; a read never rewrites a file. Registering a promoted id is skipped without error.
+A kind this package later makes native is recorded in `extensions.PROMOTIONS` with a function that converts its payload. Reading converts such nodes; a read never writes a file, though saving what was read writes the native form. Registering a promoted id is skipped without error.
 
 ## Consequences
 

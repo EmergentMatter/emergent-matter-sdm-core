@@ -5,9 +5,9 @@ A document carries an extension as one node::
     {"type": "extension", "id": "acme.taper", "version": 1,
      "payload": {...}, "children": [...], "children_dim": 3, "fallback": <public tree>}
 
-``id`` names the kind (``vendor.kind``; the prefix ``em.`` is reserved for
-Emergent Matter packages). ``version`` is the version of that kind's own payload
-shape. ``payload`` is an object this package never interprets: it only finds
+``id`` names the kind (``vendor.kind``; the prefix ``em.`` is a naming
+convention for Emergent Matter packages, not enforced). ``version`` is the version of
+that kind's own payload shape. ``payload`` is an object this package never interprets: it only finds
 the ``$ref`` leaves in it and keeps it unchanged on save. ``children`` are
 ordinary SDF subtrees of dimension ``children_dim``. ``fallback`` is an
 ordinary SDF tree built only from this package's own node kinds.
@@ -260,8 +260,11 @@ def register_extension(spec: ExtensionSpec) -> bool:
     if spec.id in PROMOTIONS:
         return False
     taken = _REGISTRY.get(spec.id)
-    if taken is not None and taken is not spec:
-        raise ExtensionRegistrationError(f"extension {spec.id!r} is already registered")
+    if taken is not None and taken != spec and taken.versions != spec.versions:
+        raise ExtensionRegistrationError(
+            f"extension {spec.id!r} is already registered for versions {sorted(taken.versions)}"
+        )
+    # The same id and versions again (a reloaded module builds a new spec) replaces the old one.
     _REGISTRY[spec.id] = spec
     return True
 
@@ -311,13 +314,22 @@ def policy(*, frozen_params: Literal["raise", "allow"]) -> Iterator[None]:
         _FROZEN_PARAMS.reset(token)
 
 
-def payload_refs(node: dict[str, Any]) -> set[str]:
-    """Parameter names the node's payload refers to."""
+def _refs(tree: Any) -> set[str]:
     from software_defined_matter.sdf.param_refs import _walk_refs
 
     out: list[tuple[str, str]] = []
-    _walk_refs(node.get("payload"), "", out)
+    _walk_refs(tree, "", out)
     return {name for name, _ in out}
+
+
+def payload_refs(node: dict[str, Any]) -> set[str]:
+    """Parameter names the node's payload or children refer to."""
+    return _refs(node.get("payload")) | _refs(node.get("children"))
+
+
+def lost_refs(node: dict[str, Any]) -> set[str]:
+    """Parameter names that only the node's own kind uses: its fallback ignores them."""
+    return payload_refs(node) - _refs(node.get("fallback"))
 
 
 def use_fallback(node: dict[str, Any], binding: Any = None) -> SDFTree:
@@ -330,7 +342,7 @@ def use_fallback(node: dict[str, Any], binding: Any = None) -> SDFTree:
     ext_id = node.get("id")
     if binding is not None and _FROZEN_PARAMS.get() == "raise":
         live = set(binding.free_names) | set(binding.derived)
-        frozen = sorted(payload_refs(node) & live)
+        frozen = sorted(lost_refs(node) & live)
         if frozen:
             raise ExtensionUnavailableError(
                 f"extension {ext_id!r} (version {node.get('version')!r}) is not available, and "
@@ -388,13 +400,31 @@ def extension_uses(part: Part) -> list[ExtensionUse]:
     for i, region in enumerate(part.materials):
         for path, node in _walk_extensions(region.sdf_tree, f"materials[{i}].sdf_tree"):
             spec = lookup(node)
-            frozen = () if spec else tuple(sorted(payload_refs(node) & live))
+            frozen = () if spec else tuple(sorted(lost_refs(node) & live))
             out.append(
                 ExtensionUse(
                     str(node.get("id")), int(node.get("version", 0)), path, spec is not None, frozen
                 )
             )
     return out
+
+
+def _check_fallback(spec: ExtensionSpec, fallback: Any, part: Part) -> None:
+    """A fallback a kind built must be a valid public tree of the kind's dimension."""
+    from software_defined_matter.sdf.validate import (
+        SemanticValidationError,
+        _contains_extension,
+        _validate_node,
+    )
+
+    if _contains_extension(fallback):
+        raise ExtensionError(f"extension {spec.id!r}: a fallback may not contain an extension")
+    try:
+        _validate_node(fallback, set(part.params), "fallback", spec.dim)
+    except SemanticValidationError as exc:
+        raise ExtensionError(
+            f"extension {spec.id!r}: make_fallback built an invalid {spec.dim}-D tree: {exc}"
+        ) from exc
 
 
 def refresh_fallbacks(part: Part) -> int:
@@ -408,7 +438,9 @@ def refresh_fallbacks(part: Part) -> int:
         for _path, node in _walk_extensions(region.sdf_tree, ""):
             spec = lookup(node)
             if spec is not None and spec.make_fallback is not None:
-                node["fallback"] = spec.make_fallback(node, part)
+                fallback = spec.make_fallback(node, part)
+                _check_fallback(spec, fallback, part)
+                node["fallback"] = fallback
                 n += 1
     return n
 
@@ -417,7 +449,7 @@ def promote_tree(tree: Any) -> Any:
     """``tree`` with every promotable extension node replaced by its native node.
 
     Returns the same object when nothing promotes. Runs on read; a read never
-    rewrites a file.
+    writes a file (saving what was read does write the native form).
     """
     if not PROMOTIONS:
         return tree

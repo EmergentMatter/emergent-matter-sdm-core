@@ -149,7 +149,7 @@ def _infer_extension_bbox(node: dict[str, Any], intervals: dict[str, Interval]) 
     spec = extensions.lookup(node)
     if spec is None:
         return _infer_node_bbox(node["fallback"], intervals)
-    return spec.bbox(
+    box = spec.bbox(
         node,
         extensions.BBoxContext(
             intervals=intervals,
@@ -159,6 +159,13 @@ def _infer_extension_bbox(node: dict[str, Any], intervals: dict[str, Interval]) 
             scalar_abs_max=lambda value: _scalar_abs_max(value, intervals),
         ),
     )
+    lo, hi = box
+    if not all(a <= b for a, b in zip(lo, hi, strict=True)):  # false for NaN too
+        raise extensions.ExtensionError(
+            f"extension {node.get('id')!r}: bbox returned {box!r}, "
+            "which is inverted or not a number"
+        )
+    return box
 
 
 def _primitive_kwargs(node: dict[str, Any]) -> dict[str, Any]:

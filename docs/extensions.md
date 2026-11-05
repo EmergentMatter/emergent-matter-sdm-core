@@ -4,7 +4,7 @@ An extension is a node kind a separate package adds. The format and the rules ar
 
 ## The node
 
-Build it with `sdf_extension(id, version, payload, fallback, children=None, children_dim=None)`. Keep everything the kind needs in `payload`. Put a subtree in `children` only when other tools should be able to see it as geometry. Make `fallback` the closest tree you can express in the public node kinds. If the kind fits the node's position as a cutter, the fallback has to be valid as a cutter there too.
+Build it with `sdf_extension(id, version, payload, fallback, children=None, children_dim=None)`. Choose an id with your own prefix; `em.` is a naming convention for Emergent Matter packages, and nothing enforces it. Keep everything the kind needs in `payload`. Put a subtree in `children` only when other tools should be able to see it as geometry. Make `fallback` the closest tree you can express in the public node kinds. If the kind fits the node's position as a cutter, the fallback has to be valid as a cutter there too.
 
 ## The spec
 

@@ -131,12 +131,16 @@ def test_versions_must_be_positive_integers():
             _spec(versions=bad)
 
 
-def test_registering_twice_is_a_noop_and_a_different_spec_is_refused():
+def test_registering_again_is_a_noop_or_a_replacement_and_a_different_kind_is_refused():
     spec = _spec()
     assert extensions.register_extension(spec) is True
     assert extensions.register_extension(spec) is True
+    # a reloaded module builds a new spec with the same versions: that replaces, it does not fail
+    again = _spec(compile=lambda n, c: None)
+    assert extensions.register_extension(again) is True
+    assert extensions.registered_extensions()[EXT] is again
     with pytest.raises(ExtensionRegistrationError):
-        extensions.register_extension(_spec())
+        extensions.register_extension(_spec(versions=frozenset({1, 2})))
 
 
 def test_a_promoted_id_is_skipped_silently():
@@ -558,3 +562,63 @@ def test_numpy_payload_values_do_not_break_the_validator():
     node = sdf_extension(EXT, 1, {"half": float(np.float32(2.0))}, sdf_primitive("sphere", r=1))
     validate(_part(node))
     assert bbox_mod is not None
+
+
+# -- review fixes ----------------------------------------------------------
+
+
+def test_the_guard_sees_params_referenced_only_from_children():
+    import jax
+
+    child = sdf_primitive("sphere", r={"$ref": "c"})
+    node = _node(children=[child], children_dim=3)
+    part = _part(node, c=Param("c", 2.0, unit="mm", bounds=(1.0, 3.0), free=True))
+    with pytest.raises(ExtensionUnavailableError, match="'c'"):
+        make_sdf_closure(node, part)
+    (use,) = extensions.extension_uses(part)
+    assert use.frozen_params == ("c",)
+    with (
+        extensions.policy(frozen_params="allow"),
+        pytest.warns(extensions.ExtensionFallbackWarning),
+    ):
+        fn = make_sdf_closure(node, part)
+    g = jax.grad(lambda v: fn(jnp.asarray([[0.0, 0.0, 0.0]]), v)[0])(jnp.asarray([2.0]))
+    assert float(g[0]) == 0.0  # what the guard exists to prevent going unnoticed
+
+
+def test_the_guard_ignores_params_the_fallback_also_uses():
+    fallback = sdf_primitive("sphere", r={"$ref": "h"})
+    node = sdf_extension(EXT, 1, {"half": {"$ref": "h"}}, fallback)
+    part = _part(node, h=Param("h", 2.0, unit="mm", bounds=(1.0, 3.0), free=True))
+    with pytest.warns(extensions.ExtensionFallbackWarning):
+        make_sdf_closure(node, part)
+    (use,) = extensions.extension_uses(part)
+    assert use.frozen_params == ()
+
+
+@pytest.mark.parametrize("rate", [0.0, -1.0, float("nan")])
+def test_a_kind_cannot_report_a_nonsense_slope_bound(rate):
+    extensions.register_extension(_spec(max_rate=lambda n, c: rate))
+    node = _node()
+    with pytest.raises(extensions.ExtensionError, match=EXT):
+        infer_sdf_max_rate(node, _part(node))
+
+
+def test_a_kind_cannot_report_an_inverted_bbox():
+    extensions.register_extension(_spec(bbox=lambda n, c: ((1.0, 0.0, 0.0), (0.0, 1.0, 1.0))))
+    node = _node()
+    with pytest.raises(extensions.ExtensionError, match=EXT):
+        infer_sdf_bbox(node, _part(node))
+
+
+def test_refresh_refuses_a_fallback_that_is_not_a_valid_public_tree():
+    part = _part(_node())
+    extensions.register_extension(_spec(make_fallback=lambda n, p: _node()))
+    with pytest.raises(extensions.ExtensionError, match="extension"):
+        extensions.refresh_fallbacks(part)
+    extensions.unregister_extension(EXT)
+    extensions.register_extension(
+        _spec(make_fallback=lambda n, p: sdf_primitive("circle_2d", r=1.0))
+    )
+    with pytest.raises(extensions.ExtensionError, match="3-D|dimension"):
+        extensions.refresh_fallbacks(part)
