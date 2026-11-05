@@ -131,16 +131,31 @@ def test_versions_must_be_positive_integers():
             _spec(versions=bad)
 
 
-def test_registering_again_is_a_noop_or_a_replacement_and_a_different_kind_is_refused():
-    spec = _spec()
-    assert extensions.register_extension(spec) is True
-    assert extensions.register_extension(spec) is True
-    # a reloaded module builds a new spec with the same versions: that replaces, it does not fail
-    again = _spec(compile=lambda n, c: None)
+def test_a_reloaded_module_replaces_its_own_registration():
+    first = _spec()
+    assert extensions.register_extension(first) is True
+    assert extensions.register_extension(first) is True
+
+    def reloaded(node, ctx):  # what re-importing the module defining _compile builds
+        return None
+
+    reloaded.__module__ = _compile.__module__
+    reloaded.__qualname__ = _compile.__qualname__
+    again = _spec(compile=reloaded)
     assert extensions.register_extension(again) is True
     assert extensions.registered_extensions()[EXT] is again
+
+
+def test_another_implementation_cannot_take_a_registered_id():
+    first = _spec()
+    extensions.register_extension(first)
+    # same id and versions, different code: refused, the original stays
+    with pytest.raises(ExtensionRegistrationError, match=EXT):
+        extensions.register_extension(_spec(compile=lambda n, c: None))
+    # same code, different dimension: refused
     with pytest.raises(ExtensionRegistrationError):
-        extensions.register_extension(_spec(versions=frozenset({1, 2})))
+        extensions.register_extension(_spec(dim=2))
+    assert extensions.registered_extensions()[EXT] is first
 
 
 def test_a_promoted_id_is_skipped_silently():
@@ -622,3 +637,21 @@ def test_refresh_refuses_a_fallback_that_is_not_a_valid_public_tree():
     )
     with pytest.raises(extensions.ExtensionError, match="3-D|dimension"):
         extensions.refresh_fallbacks(part)
+
+
+def test_refresh_fallbacks_changes_nothing_when_any_one_is_invalid():
+    good = _node(fallback_half=1.0)
+    bad = _node(fallback_half=1.0)
+    bad["payload"]["half"] = -1.0
+    tree = sdf_op("union", [good, bad])
+    part = _part(tree)
+
+    def make(node, p):
+        if node["payload"]["half"] < 0:
+            return _node()  # an extension inside a fallback: invalid
+        return sdf_primitive("sphere", r=7.0)
+
+    extensions.register_extension(_spec(make_fallback=make))
+    with pytest.raises(extensions.ExtensionError):
+        extensions.refresh_fallbacks(part)
+    assert good["fallback"]["kind"] == "box"

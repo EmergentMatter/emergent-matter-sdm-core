@@ -250,8 +250,9 @@ def promoted_ids() -> frozenset[str]:
 def register_extension(spec: ExtensionSpec) -> bool:
     """Register ``spec``; return ``True`` if it is now active.
 
-    Registering the same spec again does nothing. A different spec for a taken
-    id raises :class:`ExtensionRegistrationError`. An id this package has made
+    Registering the same spec again does nothing, and so does a reloaded module
+    rebuilding it (same dimension, same ``compile`` module and name). Any other
+    spec for a taken id raises :class:`ExtensionRegistrationError`. An id this package has made
     native is skipped and returns ``False``: the native kind replaces it, and a
     package still registering the old id must not fail on import.
     """
@@ -260,13 +261,23 @@ def register_extension(spec: ExtensionSpec) -> bool:
     if spec.id in PROMOTIONS:
         return False
     taken = _REGISTRY.get(spec.id)
-    if taken is not None and taken != spec and taken.versions != spec.versions:
+    if taken is not None and taken != spec and not _is_reload(taken, spec):
         raise ExtensionRegistrationError(
-            f"extension {spec.id!r} is already registered for versions {sorted(taken.versions)}"
+            f"extension {spec.id!r} is already registered by "
+            f"{taken.compile.__module__}.{taken.compile.__qualname__}"
         )
-    # The same id and versions again (a reloaded module builds a new spec) replaces the old one.
     _REGISTRY[spec.id] = spec
     return True
+
+
+def _is_reload(old: ExtensionSpec, new: ExtensionSpec) -> bool:
+    """Whether ``new`` is ``old`` rebuilt by a reloaded module: same dimension and the
+    same ``compile`` function by module and name. Anything else is another implementation."""
+    return (
+        old.dim == new.dim
+        and old.compile.__module__ == new.compile.__module__
+        and old.compile.__qualname__ == new.compile.__qualname__
+    )
 
 
 def unregister_extension(extension_id: str) -> None:
@@ -433,16 +444,17 @@ def refresh_fallbacks(part: Part) -> int:
     Explicit and never part of saving. A kind without ``make_fallback`` keeps its
     fallback.
     """
-    n = 0
+    built: list[tuple[dict[str, Any], Any]] = []
     for region in part.materials:
         for _path, node in _walk_extensions(region.sdf_tree, ""):
             spec = lookup(node)
             if spec is not None and spec.make_fallback is not None:
                 fallback = spec.make_fallback(node, part)
                 _check_fallback(spec, fallback, part)
-                node["fallback"] = fallback
-                n += 1
-    return n
+                built.append((node, fallback))
+    for node, fallback in built:  # only once every one is built and valid
+        node["fallback"] = fallback
+    return len(built)
 
 
 def promote_tree(tree: Any) -> Any:
