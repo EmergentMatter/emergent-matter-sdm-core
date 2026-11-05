@@ -24,6 +24,13 @@ from software_defined_matter.assembly import (
     compile_placement,
     load_bundle,
 )
+from software_defined_matter.dimension_audit import (
+    DimensionAuditError,
+    DimensionFinding,
+    DimensionReport,
+    assert_dimensions,
+    dimension_audit,
+)
 from software_defined_matter.io import load, load_part, load_schema, save, validate
 from software_defined_matter.model import (
     KNOWN_SCHEMA_VERSIONS,
@@ -85,6 +92,11 @@ def __dir__() -> list[str]:
 
 
 __all__ = [
+    "dimension_audit",
+    "assert_dimensions",
+    "DimensionReport",
+    "DimensionFinding",
+    "DimensionAuditError",
     "PlacementEval",
     "PlacementState",
     "PlacementError",

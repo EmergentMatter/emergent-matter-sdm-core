@@ -20,6 +20,7 @@ src/software_defined_matter/
   sample.py        # Monte Carlo sampling and propagation over param priors
   process.py       # manufacturing process-profile prior resolution
   audit.py         # gap audits: declared clearance vs measured SDF gap
+  dimension_audit.py  # every dimension free, input or driven; nothing dangles
   bbox.py          # numeric bbox tightening
   sdf/             # the SDF runtime: primitives, CSG ops, transforms,
                    #   the tree-to-JAX-closure compiler, analytic bbox
