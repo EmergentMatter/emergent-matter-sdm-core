@@ -26,6 +26,7 @@ from software_defined_matter import (
     make_param_ref,
     sdf_op,
     sdf_primitive,
+    sdf_raster_field,
     sdf_transform,
 )
 from software_defined_matter.sdf.compile import make_sdf_closure
@@ -255,4 +256,33 @@ def test_twist_and_bend_are_unknown_without_a_domain(deform):
         "child": sdf_primitive("box", b=[3.0, 3.0, 3.0]),
         "params": {"k": 0.2},
     }
+    assert infer_sdf_max_rate(tree, _part(tree)) == UNKNOWN
+
+
+HELIX = {"major_r": 7.0, "pitch": 4.0, "r": 1.2, "n_turns": 3.0, "phase": 0.0, "handedness": 1.0}
+
+
+def test_a_helix_reports_unknown():
+    """The helix field jumps across its own axis, so no finite rate holds on a
+    domain that contains the axis, and a unit rate would be a guess."""
+    helix = sdf_primitive("helix", **HELIX)
+    closure = make_sdf_closure(helix, _part(helix))
+    free = jnp.asarray(_part(helix).param_vector())
+    pts = jnp.asarray([[-5e-4, 0.0, 0.0], [5e-4, 0.0, 0.0]], dtype=jnp.float32)
+    values = np.asarray(closure(pts, free))
+    assert abs(values[1] - values[0]) / 1e-3 > 10.0, "the axis jump this test documents is gone"
+    assert infer_sdf_max_rate(helix, _part(helix)) == UNKNOWN
+
+
+def test_a_raster_reports_unknown_whatever_its_samples():
+    """A sampled field's rate follows its samples. These are three times a
+    distance, so the field changes about three millimetres per millimetre."""
+    z, y, x = np.mgrid[-2:3, -2:3, -2:3]
+    raster = sdf_raster_field([-2.0] * 3, 1.0, 3.0 * (np.sqrt(x * x + y * y + z * z) - 1.2))
+    assert _measured_rate(raster, 1.5) > 2.0
+    assert infer_sdf_max_rate(raster, _part(raster)) == UNKNOWN
+
+
+def test_a_tree_holding_a_primitive_without_a_unit_rate_reports_unknown():
+    tree = sdf_op("union", [sdf_primitive("sphere", r=2.0), sdf_primitive("helix", **HELIX)])
     assert infer_sdf_max_rate(tree, _part(tree)) == UNKNOWN
