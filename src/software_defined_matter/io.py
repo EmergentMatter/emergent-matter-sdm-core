@@ -144,7 +144,8 @@ def validate(source: PathLike | dict[str, Any] | Part | Assembly) -> None:
 def load(path: PathLike, *, b_validate_schema: bool = True) -> Part | Assembly:
     """Load a Part or Assembly declaration from the shared document format.
 
-    Structural and local semantic validation run by default. Use ``load_bundle``
+    Structural and local semantic validation run by default;
+    ``b_validate_schema=False`` skips both, not only the JSON Schema. Use ``load_bundle``
     to resolve and validate external references, promotions, and bindings.
     """
     with Path(path).open() as fh:
@@ -175,7 +176,8 @@ def save(
         part: The part to serialise.
         path: Path to write the ``.sdm`` file to.
         b_validate_schema: If True (default), the serialised dict is
-            validated against the schema before it is written.
+            validated against the schema before it is written. False
+            skips the semantic checks as well as the JSON Schema.
         n_indent: JSON indent; set to ``None`` for a compact single-line file.
     """
     doc = part.to_dict()
