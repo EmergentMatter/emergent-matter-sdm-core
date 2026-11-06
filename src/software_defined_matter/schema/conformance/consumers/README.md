@@ -32,6 +32,8 @@ consumers = files("software_defined_matter.schema.conformance.consumers")
 | `polygon_inline.sdm` | polygon below the table threshold (inline `vec2 V[...]`) |
 | `polygon_table.sdm` | polygon above the table threshold (`poly_table` + `sdm_polygon_2d_tab`) |
 | `components_union.sdm` | labelled root-union components |
+| `raster_field.sdm` | inline `raster_field` grid: emission through the grid table, JAX samples, load/save and CLI round-trip |
+| `kinematics_roundtrip.sdm` | rigid bodies and flexures survive load/save; full-part GLSL emission refuses unsupported flexures |
 
 Each fixture has a matching `expected/<stem>.json` fingerprint:
 
