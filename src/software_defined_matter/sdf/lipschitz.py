@@ -144,10 +144,41 @@ def _node_rate(node: Any, intervals: dict[str, Interval], domain: BBox | None) -
         # vectors, so the frame itself contributes no stretch.
         return _node_rate(node["child"], intervals, domain)
 
+    if node_type == "extension":
+        from software_defined_matter import extensions
+
+        spec = extensions.lookup(node)
+        if spec is None:
+            return _node_rate(node["fallback"], intervals, domain)
+        return _checked_rate(
+            node,
+            spec.max_rate(
+                node,
+                extensions.RateContext(
+                    intervals=intervals,
+                    domain=domain,
+                    rate=lambda tree: _node_rate(tree, intervals, domain),
+                ),
+            ),
+        )
+
     # `loft` interpolates two 2-D fields along Z; the interpolation introduces
     # a Z-derivative that depends on how different the sections are, and no
     # bound has been worked out.
     return UNKNOWN
+
+
+def _checked_rate(node: dict[str, Any], rate: Any) -> float:
+    """A kind's slope bound must be a positive number, or infinity for "unknown"."""
+    from software_defined_matter.extensions import ExtensionError
+
+    value = float(rate)
+    if not value > 0.0:  # false for zero, a negative and NaN
+        raise ExtensionError(
+            f"extension {node.get('id')!r}: max_rate returned {value!r}; expected a positive "
+            "number, or math.inf when no bound is known"
+        )
+    return value
 
 
 def _transform_rate(

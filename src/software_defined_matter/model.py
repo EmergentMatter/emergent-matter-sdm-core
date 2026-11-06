@@ -28,7 +28,7 @@ from software_defined_matter.ports import Port, scalar_refs
 
 # The newest schema_version this package emits and validates against by
 # default. Distinct from the package's own version (0.3.0 today).
-LATEST_SCHEMA_VERSION = "0.6"
+LATEST_SCHEMA_VERSION = "0.7"
 
 # Fallback when a document's schema_version is missing or unrecognised.
 # 0.1's `schema_version` property is a permissive pattern rather than a
@@ -39,7 +39,7 @@ FALLBACK_SCHEMA_VERSION = "0.1"
 # Every version this package can load and validate. Absent `prior` /
 # `tolerance` means a delta at the authored value, so 0.1 and 0.2 documents
 # load unchanged; 0.3 is a pure superset.
-KNOWN_SCHEMA_VERSIONS = ("0.1", "0.2", "0.3", "0.4", "0.5", "0.6")
+KNOWN_SCHEMA_VERSIONS = ("0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7")
 
 # Capability -> the schema_version that introduced it; min_schema_version_for
 # takes the newest entry among the capabilities a part actually uses.
@@ -56,6 +56,8 @@ _CAPABILITY_MIN_VERSION: dict[str, str] = {
     "shear_linear": "0.6",
     "taper_linear": "0.6",
     "scale_axis": "0.6",
+    # Any extension node: the kind itself is the extension's business, the node is the format's.
+    "extension": "0.7",
     "param_expr": "0.3",
     "prior_params": "0.3",
 }
@@ -517,10 +519,12 @@ class MaterialRegion:
                 f"MaterialRegion {d.get('name')!r} is missing required 'sdf_tree'. "
                 "Every material must define its spatial distribution as an SDF."
             )
+        from software_defined_matter.extensions import promote_tree
+
         return cls(
             material_id=d["material_id"],
             name=d["name"],
-            sdf_tree=d["sdf_tree"],
+            sdf_tree=promote_tree(d["sdf_tree"]),
         )
 
     def __repr__(self) -> str:
@@ -956,6 +960,13 @@ def _capabilities_used(part: Part) -> set[str]:
 
     def visit(value: Any) -> None:
         if isinstance(value, dict):
+            if value.get("type") == "extension":
+                # The payload is the extension's own vocabulary and says nothing about
+                # this format's; the fallback and children are ordinary trees.
+                used.add("extension")
+                for key in ("children", "fallback"):
+                    visit(value.get(key))
+                return
             if value.get("type") == "unop" and value.get("op") in {"sin", "cos"}:
                 used.add("trig_expr")
             if value.get("kind") in {"raster_field", "axis_ramp", "radial_hermite"}:
@@ -1323,6 +1334,36 @@ def sdf_loft(
     }
 
 
+def sdf_extension(
+    ext_id: str,
+    version: int,
+    payload: dict[str, Any],
+    fallback: SDFTree,
+    children: list[SDFTree] | None = None,
+    children_dim: int | None = None,
+) -> SDFTree:
+    """Create an ``extension`` node: a kind a separate package adds.
+
+    ``payload`` is the kind's own object, which this package never interprets;
+    ``fallback`` is the public tree used wherever the kind is not available. See
+    :mod:`software_defined_matter.extensions`. ``children`` are ordinary SDF
+    subtrees of dimension ``children_dim`` (required when there are children).
+    """
+    node: SDFTree = {
+        "type": "extension",
+        "id": ext_id,
+        "version": version,
+        "payload": payload,
+        "fallback": fallback,
+    }
+    if children:
+        if children_dim not in (2, 3):
+            raise ValueError("sdf_extension: children need children_dim of 2 or 3")
+        node["children"] = list(children)
+        node["children_dim"] = children_dim
+    return node
+
+
 def make_param_ref(name: str) -> dict[str, str]:
     """Leaf referencing a Param by name. Resolvable in any DSL leaf slot."""
     return {"$ref": name}
@@ -1356,6 +1397,7 @@ __all__ = [
     "sdf_modifier",
     "sdf_op",
     "sdf_primitive",
+    "sdf_extension",
     "sdf_sweep",
     "sdf_transform",
     "supports_version",

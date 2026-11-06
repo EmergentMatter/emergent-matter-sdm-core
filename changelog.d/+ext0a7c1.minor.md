@@ -1,0 +1,1 @@
+Add extension nodes (schema 0.7): a registry lets another package add node kinds, each carrying a public fallback tree that stands in wherever the kind is not registered. Parts that do not use one save the same bytes as before.

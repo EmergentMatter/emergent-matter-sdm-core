@@ -119,6 +119,29 @@ def _walk(node: Any, *, can_be_unbounded: bool, region_name: str) -> None:
         # they are inherently bounded: nothing further to check.
         return
 
+    if node_type == "extension":
+        from software_defined_matter import extensions
+
+        spec = extensions.lookup(node)
+        if spec is not None and spec.unbounded and not can_be_unbounded:
+            raise UnboundedRootError(
+                f"extension {node.get('id')!r} in {region_name!r} is valid only as a cutter, "
+                "like a plane: put it under intersect or as a non-first subtract child"
+            )
+        # The fallback stands in for the node, so it must be valid in the node's position.
+        _walk(node.get("fallback"), can_be_unbounded=can_be_unbounded, region_name=region_name)
+        children = node.get("children") or []
+        if spec is not None and spec.csg_like is not None:
+            _walk(
+                {"type": "op", "op": spec.csg_like, "children": children},
+                can_be_unbounded=can_be_unbounded,
+                region_name=region_name,
+            )
+        else:
+            for c in children:
+                _walk(c, can_be_unbounded=False, region_name=region_name)
+        return
+
 
 def _check_phase_frac_requires_centered(node: dict[str, Any], path: str) -> None:
     """``phase_frac`` offsets the centered wedge only; fail loud otherwise."""
@@ -296,6 +319,10 @@ def _validate_node(
         _validate_child(node, known_params, path, 2)
         return
 
+    if node_type == "extension":
+        _validate_extension(node, known_params, path, expected_dim)
+        return
+
     if node_type == "loft":
         _check_dim(wire.LOFT, expected_dim, path, "type")
         _validate_params(node, wire.LOFT, known_params, path)
@@ -413,6 +440,112 @@ def _validate_params(
                 f"{path}.params.{pspec.name}",
                 expected_dim,
             )
+
+
+def _payload_within_limits(value: Any) -> bool:
+    """Iterative check of the payload's depth and item count."""
+    from software_defined_matter.extensions import MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS
+
+    stack: list[tuple[Any, int]] = [(value, 1)]
+    items = 0
+    while stack:
+        item, depth = stack.pop()
+        if isinstance(item, dict):
+            members: Any = item.values()
+        elif isinstance(item, list):
+            members = item
+        else:
+            continue
+        if depth > MAX_PAYLOAD_DEPTH:
+            return False
+        items += len(item)
+        if items > MAX_PAYLOAD_ITEMS:
+            return False
+        stack.extend((m, depth + 1) for m in members)
+    return True
+
+
+def _contains_extension(tree: Any) -> bool:
+    if isinstance(tree, dict):
+        if tree.get("type") == "extension":
+            return True
+        return any(_contains_extension(tree.get(k)) for k in ("child", "children", "field"))
+    if isinstance(tree, list):
+        return any(_contains_extension(t) for t in tree)
+    return False
+
+
+def _validate_extension(
+    node: dict[str, Any], known_params: set[str], path: str, expected_dim: Literal[2, 3]
+) -> None:
+    """Validate an ``extension`` node: shape, fallback, children, then the registered kind."""
+    from software_defined_matter import extensions
+
+    unknown = set(node) - extensions.NODE_KEYS
+    if unknown:
+        raise SemanticValidationError(f"{path}: unrecognised extension field(s) {sorted(unknown)}")
+    ext_id = node.get("id")
+    if not isinstance(ext_id, str) or not extensions.ID_PATTERN.match(ext_id):
+        raise SemanticValidationError(
+            f"{path}.id: expected 'vendor.kind' in lower case, got {ext_id!r}"
+        )
+    version = node.get("version")
+    if not isinstance(version, int) or isinstance(version, bool) or version < 1:
+        raise SemanticValidationError(f"{path}.version: expected an integer >= 1, got {version!r}")
+    payload = node.get("payload")
+    if not isinstance(payload, dict):
+        raise SemanticValidationError(f"{path}.payload: expected an object")
+    if not _payload_within_limits(payload):
+        raise SemanticValidationError(
+            f"{path}.payload: nested deeper than {extensions.MAX_PAYLOAD_DEPTH} levels "
+            f"or larger than {extensions.MAX_PAYLOAD_ITEMS} items"
+        )
+    fallback = node.get("fallback")
+    if fallback is None:
+        raise SemanticValidationError(f"{path}.fallback: an extension needs a fallback tree")
+    if _contains_extension(fallback):
+        raise SemanticValidationError(f"{path}.fallback: a fallback may not contain an extension")
+    _validate_node(fallback, known_params, f"{path}.fallback", expected_dim)
+
+    children = node.get("children")
+    children_dim = node.get("children_dim")
+    if children is None:
+        if children_dim is not None:
+            raise SemanticValidationError(f"{path}.children_dim: given without children")
+    else:
+        if not isinstance(children, list) or not children:
+            raise SemanticValidationError(f"{path}.children: expected a non-empty list")
+        if children_dim not in (2, 3):
+            raise SemanticValidationError(f"{path}.children_dim: expected 2 or 3 with children")
+        for i, child in enumerate(children):
+            _validate_node(child, known_params, f"{path}.children[{i}]", children_dim)
+
+    spec = extensions.lookup(node)
+    if spec is None:
+        return
+    if spec.dim != expected_dim:
+        raise SemanticValidationError(
+            f"{path}: expected a {expected_dim}-D node here, but extension {ext_id!r} is "
+            f"{spec.dim}-D."
+        )
+    if spec.validate is not None:
+
+        def fail(where: str, message: str) -> None:
+            raise SemanticValidationError(f"{where}: {message}")
+
+        def subtree(tree: Any, dim: Literal[2, 3], where: str) -> None:
+            _validate_node(tree, known_params, where, dim)
+
+        spec.validate(
+            node,
+            extensions.ValidateContext(
+                known_params=frozenset(known_params),
+                path=path,
+                expected_dim=expected_dim,
+                validate_subtree=subtree,
+                fail=fail,
+            ),
+        )
 
 
 def _validate_child(

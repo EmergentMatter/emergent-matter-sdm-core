@@ -17,6 +17,7 @@ The resolver returns JAX values so the whole SDF / objective pipeline stays
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from typing import TYPE_CHECKING, Any, Protocol
 
 import jax.numpy as jnp
@@ -65,6 +66,26 @@ class ParamBinding:
         # tracer frames instead of a sentence naming two param names.
         if self.derived:
             part.derived_order()
+
+    def nominal(self) -> dict[str, float]:
+        """Every non-derived parameter's value now: fixed ones, and free ones at their start."""
+        return {**self.fixed, **self._initial_values}
+
+    def layered(
+        self, names: Iterable[str], getter: Callable[[str, jnp.ndarray], jnp.ndarray]
+    ) -> ParamBinding:
+        """A binding serving ``names`` from ``getter(name, free_vec)``; the rest as this one does.
+
+        For a node that evaluates a subtree with values of its own, such as a
+        per-point interpolated number, without touching the part's parameters.
+        """
+        extra = frozenset(names)
+        layered = _LayeredBinding.__new__(_LayeredBinding)
+        layered.__dict__.update(self.__dict__)
+        layered._inner = self
+        layered._extra = extra
+        layered._getter = getter
+        return layered
 
     def n_free(self) -> int:
         return len(self.free_names)
@@ -144,6 +165,19 @@ class _DerivedView:
         if name in self._binding.derived:
             return self._binding._eval_derived(name, free_vec, self._memo)
         return self._binding.get(name, free_vec)
+
+
+class _LayeredBinding(ParamBinding):
+    """A binding that serves some names from a getter; see :meth:`ParamBinding.layered`."""
+
+    _inner: ParamBinding
+    _extra: frozenset[str]
+    _getter: Callable[[str, jnp.ndarray], jnp.ndarray]
+
+    def get(self, name: str, free_vec: jnp.ndarray) -> jnp.ndarray:
+        if name in self._extra:
+            return self._getter(name, free_vec)
+        return self._inner.get(name, free_vec)
 
 
 def make_binding(part: Part) -> ParamBinding:

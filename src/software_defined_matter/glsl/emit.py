@@ -353,6 +353,10 @@ class GLSLEmission:
     # the march cost of sdf_polygon_2d is linear in vertex count per step, so
     # this is the number a viewer perf report needs next to frame time.
     poly_lod: int | None = None
+    # Ids of extension nodes drawn from their fallback tree, in first-use order.
+    # Empty means the scene is drawn exactly. A host should show a non-empty
+    # list as an approximate view.
+    fallbacks: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -395,6 +399,8 @@ class _GLSLEmitter:
         self.sweep_table_on = False
         self.sweep_max_s = 0
         self._node_memo: dict[tuple[int, bool, float, str], str] = {}
+        # Ids of extension nodes drawn from their fallback tree.
+        self.fallbacks: list[str] = []
 
         self.grid_arrays: list = []
         self.grid_len = 0
@@ -678,6 +684,12 @@ class _GLSLEmitter:
             return self._emit_sweep(node)
         if kind == "2d_to_3d":
             return self._emit_2d_to_3d(node, dim)
+        if kind == "extension":
+            # No extension has a GLSL routine: its fallback tree is what the shader draws.
+            ext_id = str(node.get("id"))
+            if ext_id not in self.fallbacks:
+                self.fallbacks.append(ext_id)
+            return self.emit_node(node["fallback"], dim=dim)
         raise ValueError(f"Unknown SDF node type {kind!r}")
 
     # -- Primitive -------------------------------------------------------
@@ -1870,7 +1882,7 @@ def _total_polygon_verts(node: Any, poly_lod: int | None = None) -> int:
     """
     total = _scan_polygon_verts(node, poly_lod)
     if isinstance(node, dict):
-        for key in ("child", "children", "field"):
+        for key in ("child", "children", "field", "fallback"):
             if key in node:
                 total += _total_polygon_verts(node[key], poly_lod)
     elif isinstance(node, (list, tuple)):
@@ -1894,7 +1906,7 @@ def _max_polygon_verts(node: Any, poly_lod: int | None = None) -> int:
     """
     best = _scan_polygon_verts(node, poly_lod)
     if isinstance(node, dict):
-        for key in ("child", "children", "field"):
+        for key in ("child", "children", "field", "fallback"):
             if key in node:
                 best = max(best, _max_polygon_verts(node[key], poly_lod))
     elif isinstance(node, (list, tuple)):
@@ -1951,7 +1963,7 @@ def _total_sweep_points(node: Any) -> int:
             ):
                 kind, closed, _frame = _sweep_structure(params)
                 total += _sampled_path_count(len(ctrl), kind, closed)
-        for key in ("child", "children", "field"):
+        for key in ("child", "children", "field", "fallback"):
             if key in node:
                 total += _total_sweep_points(node[key])
     elif isinstance(node, (list, tuple)):
@@ -2291,6 +2303,7 @@ def emit_glsl(
         grid_table=grid_table,
         grid_tex_width=grid_tex_width,
         components=components,
+        fallbacks=list(emitter.fallbacks),
     )
 
 
