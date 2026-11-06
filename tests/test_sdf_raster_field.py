@@ -15,6 +15,7 @@ from software_defined_matter.sdf.compile import make_sdf_closure
 from software_defined_matter.sdf.raster import (
     decode_raster_values,
     encode_raster_data,
+    normalize_spacing,
     require_literal_raster_params,
 )
 
@@ -185,3 +186,58 @@ def test_baked_node_saves_under_its_required_schema(tmp_path):
     save(part, path)
     assert load(path).to_dict() == part.to_dict()
     assert part.to_dict()["schema_version"] == "0.3"
+
+
+_GRID = np.zeros((3, 3, 3))
+_MALFORMED_SPACING = [
+    "111",  # a string iterates as three characters
+    ["1", "1", "1"],  # numeric strings
+    [1.0, "a", 1.0],  # a non-numeric entry
+    [[1.0], 1.0, 1.0],  # a nested entry
+    [1.0, 1.0],  # the wrong count
+    True,  # a boolean is not a number
+    [1.0, True, 1.0],
+    0.0,
+    -1.0,
+    float("nan"),
+    [1.0, float("inf"), 1.0],
+]
+
+
+@pytest.mark.parametrize("spacing", _MALFORMED_SPACING)
+def test_the_builder_rejects_malformed_spacing_and_names_it(spacing):
+    with pytest.raises(ValueError, match="spacing"):
+        sdf_raster_field([0.0] * 3, spacing, _GRID)
+
+
+@pytest.mark.parametrize("spacing", _MALFORMED_SPACING)
+def test_the_codec_rejects_malformed_spacing_and_names_it(spacing):
+    params = dict(sdf_raster_field([0.0] * 3, 1.0, _GRID)["params"], spacing=spacing)
+    with pytest.raises(ValueError, match="spacing"):
+        normalize_spacing(params)
+
+
+@pytest.mark.parametrize("spacing", _MALFORMED_SPACING)
+def test_an_unvalidated_tree_with_malformed_spacing_fails_to_compile(spacing):
+    node = sdf_raster_field([0.0] * 3, 1.0, _GRID)
+    node["params"]["spacing"] = spacing
+    part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=node)])
+    with pytest.raises(ValueError, match="spacing"):
+        make_sdf_closure(node, part)
+
+
+@pytest.mark.parametrize(
+    ("spacing", "expected"),
+    [
+        (0.5, (0.5, 0.5, 0.5)),
+        (2, (2.0, 2.0, 2.0)),
+        ([0.5, 1.0, 2.0], (0.5, 1.0, 2.0)),
+        ((1, 1, 1), (1.0, 1.0, 1.0)),
+        (np.array([0.5, 1.0, 2.0]), (0.5, 1.0, 2.0)),
+        (np.float64(0.5), (0.5, 0.5, 0.5)),
+    ],
+)
+def test_valid_spacing_is_unchanged(spacing, expected):
+    node = sdf_raster_field([0.0] * 3, spacing, _GRID)
+    assert tuple(node["params"]["spacing"]) == expected
+    assert normalize_spacing(node["params"]) == expected
