@@ -15,9 +15,9 @@ spec = ExtensionSpec(
     id="acme.slab",
     versions=frozenset({1}),
     dim=3,
-    compile=compile_slab,    # (node, CompileContext) -> (points, free_vec) -> distance
-    bbox=bbox_slab,          # (node, BBoxContext) -> ((x0, y0, z0), (x1, y1, z1))
-    max_rate=lambda node, ctx: 1.0,   # return math.inf when no bound is known
+    compile=compile_slab,  # (node, CompileContext) -> (points, free_vec) -> distance
+    bbox=bbox_slab,  # (node, BBoxContext) -> ((x0, y0, z0), (x1, y1, z1))
+    max_rate=lambda node, ctx: 1.0,  # return math.inf when no bound is known
 )
 register_extension(spec)
 ```
