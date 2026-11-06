@@ -378,3 +378,13 @@ def test_every_registered_primitive_is_audited():
         f"tables in tests/conftest.py: {missing}. Add representative "
         f"parameters so they are audited."
     )
+
+
+def test_rate_declarations_cover_the_audit_exceptions():
+    """A primitive this audit exempts must not report a unit rate to
+    ``infer_sdf_max_rate``, and the declarations name only real primitives."""
+    from software_defined_matter.sdf.lipschitz import _PRIMITIVES_WITHOUT_UNIT_RATE
+
+    exempt = set(KNOWN_BOUNDS) | set(KNOWN_OVER_REPORTING) | {"raster_field"}
+    assert exempt <= set(_PRIMITIVES_WITHOUT_UNIT_RATE)
+    assert set(_PRIMITIVES_WITHOUT_UNIT_RATE) <= set(_PRIMITIVES)

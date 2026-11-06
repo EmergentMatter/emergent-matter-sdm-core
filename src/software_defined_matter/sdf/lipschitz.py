@@ -1,10 +1,11 @@
 """How fast can an SDF tree's value change per unit of travel through space?
 
 An SDF is supposed to return the distance to the nearest surface, which means
-moving one millimetre can change the value by at most one millimetre. Every
-primitive satisfies that (``tests/test_sdf_is_distance.py`` verifies it), but a
-whole *tree* need not: some operations stretch space, and the value stretches
-with it.
+moving one millimetre can change the value by at most one millimetre. The
+primitives satisfy that (``tests/test_sdf_is_distance.py`` verifies it), apart
+from the few declared in ``_PRIMITIVES_WITHOUT_UNIT_RATE``, which return
+:data:`UNKNOWN`. A whole *tree* need not either: some operations stretch space,
+and the value stretches with it.
 
     union(sphere, box)               1.0    both children are distances
     translate(sphere, t=[5,0,0])     1.0    moving a shape changes nothing
@@ -59,10 +60,18 @@ if TYPE_CHECKING:
 #: fall back to trusting nothing.
 UNKNOWN = math.inf
 
-#: Every registered primitive returns a true distance (rate <= 1). This is not
-#: an assumption: ``tests/test_sdf_is_distance.py`` measures it for every
+#: A registered primitive returns a true distance (rate <= 1). This is not an
+#: assumption: ``tests/test_sdf_is_distance.py`` measures it for every
 #: primitive over several parameter sets, and fails if one regresses.
 _PRIMITIVE_RATE = 1.0
+
+#: Primitives with no established unit rate, by kind, with the reason; they
+#: return :data:`UNKNOWN`. ``tests/test_sdf_is_distance.py`` holds this table to
+#: its own exceptions, so a primitive the audit exempts cannot report a unit rate.
+_PRIMITIVES_WITHOUT_UNIT_RATE: dict[str, str] = {
+    "helix": "its value jumps across its own axis, so no finite rate holds there",
+    "raster_field": "a sampled field's rate follows its samples, not a universal unit",
+}
 
 
 def infer_sdf_max_rate(
@@ -113,6 +122,8 @@ def _node_rate(node: Any, intervals: dict[str, Interval], domain: BBox | None) -
     node_type = node["type"]
 
     if node_type == "primitive":
+        if node.get("kind") in _PRIMITIVES_WITHOUT_UNIT_RATE:
+            return UNKNOWN
         return _PRIMITIVE_RATE
 
     if node_type == "op":
