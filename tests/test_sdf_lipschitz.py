@@ -276,7 +276,8 @@ def test_a_helix_reports_unknown():
 
 def test_a_raster_reports_unknown_whatever_its_samples():
     """A sampled field's rate follows its samples. These are three times a
-    distance, so the field changes about three millimetres per millimetre."""
+    distance, so the field changes more than twice as fast as a distance,
+    which the probe below checks."""
     z, y, x = np.mgrid[-2:3, -2:3, -2:3]
     raster = sdf_raster_field([-2.0] * 3, 1.0, 3.0 * (np.sqrt(x * x + y * y + z * z) - 1.2))
     assert _measured_rate(raster, 1.5) > 2.0
