@@ -1,8 +1,10 @@
 """Bake a reference JAX field into a ``raster_field`` node (DR-0003).
 
-The analytic construction stays the source of truth; a bake is a derived
-artifact stamped with provenance (content hash, generator note) so it can
-be regenerated from the reference field.
+When an analytic construction is the authority, it stays the source of
+truth, and a bake is a derived artifact stamped with provenance (content
+hash, generator note) so it can be regenerated from the reference field.
+A sampled field may instead be retained as the definition itself; see
+``docs/adr/0009-retained-sampled-hard-geometry.md``.
 """
 
 from __future__ import annotations

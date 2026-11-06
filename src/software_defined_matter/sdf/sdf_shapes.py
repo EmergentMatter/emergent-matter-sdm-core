@@ -1046,11 +1046,13 @@ def raster_field(p, origin, spacing, values):
 
     ``values`` is the decoded sample block, shape ``(nz, ny, nx)`` —
     ``values[k, j, i]`` sits at ``origin + spacing * (i, j, k)`` (see
-    ``sdf/raster.py`` for the wire codec). The analytic tree stays the
-    source of truth: a grid is a derived artifact baked from a reference
-    field at authoring time (``sdf/bake.py``), carried inline so heavy
-    constructions (OW-II's 242-pose ROM carves) evaluate as one fetch
-    instead of thousands of node calls. See DR-0003.
+    ``sdf/raster.py`` for the wire codec). A grid is usually a derived
+    artifact baked from a reference field at authoring time
+    (``sdf/bake.py``), carried inline so heavy constructions (OW-II's
+    242-pose ROM carves) evaluate as one fetch instead of thousands of
+    node calls; an authoring application may instead retain the grid as
+    the definition itself. See DR-0003 and
+    ``docs/adr/0009-retained-sampled-hard-geometry.md``.
 
     Semantics, kept EXACTLY in lockstep with GLSL ``sdf_raster_field``:
 
