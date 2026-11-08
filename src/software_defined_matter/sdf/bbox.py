@@ -1,10 +1,18 @@
-"""Conservative axis-aligned bounding-box inference for SDF trees."""
+"""Conservative axis-aligned bounding-box inference for SDF trees.
+
+It also judges a box stored in ``Part.metadata["bbox"]``: a box inferred for
+the part is a cache, valid only while what it was inferred over still holds.
+:func:`stored_bbox` is how every reader of the stored box decides whether to
+use it.
+"""
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from collections.abc import Iterable, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, get_args
 
 if TYPE_CHECKING:
     from software_defined_matter.model import MaterialRegion, Part, SDFTree
@@ -114,6 +122,154 @@ def pad_bbox(bbox: BBox, margin: float) -> BBox:
     """
     m = abs(float(margin))
     return _inflate_bbox(bbox, (m, m, m))
+
+
+#: ``Part.metadata`` key of the record that says what a stored
+#: ``metadata["bbox"]`` was inferred over.
+BBOX_BASIS_KEY = "bbox_basis"
+
+#: Who chose a stored box. ``"authored"`` is the author's own domain, which may
+#: deliberately crop the part. ``"inferred"`` (``Part.infer_bbox_from_sdf``) and
+#: ``"tightened"`` (``software_defined_matter.bbox.tighten_part_bbox``) are
+#: caches, valid only while their basis holds.
+BBoxSource = Literal["authored", "inferred", "tightened"]
+
+#: What :func:`stored_bbox_status` reports about a part's stored box.
+BBoxStatus = Literal["absent", "authored", "unlabelled", "valid", "stale"]
+
+_BASIS_MODES = ("bounds", "values")
+
+
+def bbox_basis(part: Part, box: Any, *, source: BBoxSource, mode: str) -> dict[str, Any]:
+    """Return the basis record for a box a writer persists into ``metadata["bbox"]``.
+
+    Store it under ``metadata[BBOX_BASIS_KEY]`` beside the box. It names the
+    source and the inference mode, keeps the box it describes, and fingerprints
+    the part's envelope with the parameter intervals that ``mode`` takes from
+    the part. :func:`stored_bbox_status` recomputes them to judge the box later.
+
+    Args:
+        part: The part the box was inferred for, as it is now.
+        box: The stored corners, ``[[xlo, ylo, zlo], [xhi, yhi, zhi]]``.
+        source: ``"inferred"`` or ``"tightened"``. An authored box needs no
+            fingerprint; record it as ``{"source": "authored"}``.
+        mode: ``"bounds"`` or ``"values"``, as for :func:`build_param_intervals`.
+
+    Raises:
+        BBoxInferenceError: If the part has no materials.
+        ValueError: If ``source`` is not a cache source or ``mode`` is unknown.
+    """
+    if source not in ("inferred", "tightened"):
+        raise ValueError(f"source must be 'inferred' or 'tightened', got {source!r}")
+    fingerprint, _ = _basis_fingerprint(part, mode)
+    return {"source": source, "mode": mode, "bbox": _corners(box), "fingerprint": fingerprint}
+
+
+def stored_bbox_status(part: Part) -> BBoxStatus:
+    """Say whether the part may still use its stored ``metadata["bbox"]``.
+
+    Returns:
+        ``"absent"`` when no box is stored. ``"authored"`` when the basis marks
+        the box as the author's. ``"unlabelled"`` when no basis describes this
+        box: it cannot be told apart from an authored domain or from a cache
+        written without a basis, so it is used as stored and its validity is not
+        established. ``"valid"`` when a cache's basis still holds: the same
+        envelope, the same intervals for its mode, and every current value,
+        relation values included, inside those intervals. ``"stale"`` when a
+        cache's basis no longer holds.
+
+    Raises:
+        ValueError: If ``metadata[BBOX_BASIS_KEY]`` is malformed.
+    """
+    box = part.metadata.get("bbox")
+    if box is None:
+        return "absent"
+    basis = part.metadata.get(BBOX_BASIS_KEY)
+    if basis is None:
+        return "unlabelled"
+    if not isinstance(basis, dict) or basis.get("source") not in get_args(BBoxSource):
+        raise ValueError(
+            f"Part {part.name!r}: metadata[{BBOX_BASIS_KEY!r}] must be a mapping whose "
+            f"'source' is one of {get_args(BBoxSource)}, got {basis!r}"
+        )
+    if basis["source"] == "authored":
+        return "authored"
+    if basis.get("mode") not in _BASIS_MODES:
+        raise ValueError(
+            f"Part {part.name!r}: metadata[{BBOX_BASIS_KEY!r}] needs a 'mode' of "
+            f"{_BASIS_MODES}, got {basis.get('mode')!r}"
+        )
+    if basis.get("bbox") != _corners(box):
+        # The record describes a box that has since been replaced by hand.
+        return "unlabelled"
+    return "valid" if _basis_holds(part, basis) else "stale"
+
+
+def stored_bbox(part: Part) -> Any:
+    """Return ``metadata["bbox"]`` when the part may still use it, else None.
+
+    Readers call this in place of ``part.metadata.get("bbox")``. A cache whose
+    basis no longer holds gives None, so the reader infers a box, or refuses,
+    as if none were stored. An authored or unlabelled box is returned as stored.
+    An authored box may deliberately crop the part, so using it is never
+    evidence that the part fits inside it.
+    """
+    if stored_bbox_status(part) in ("absent", "stale"):
+        return None
+    return part.metadata["bbox"]
+
+
+def _corners(box: Any) -> list[list[float]]:
+    lo, hi = box
+    return [[float(v) for v in lo], [float(v) for v in hi]]
+
+
+def _basis_fingerprint(part: Part, mode: str) -> tuple[str, dict[str, Interval]]:
+    """Hash the part's envelope with the parameter intervals ``mode`` takes from it."""
+    envelope = part.computed_envelope()
+    if envelope is None:
+        raise BBoxInferenceError(f"Part {part.name!r} has no materials, so no box basis.")
+    intervals = build_param_intervals(part, mode=mode)
+    payload = {
+        "mode": mode,
+        "envelope": envelope,
+        "intervals": {name: list(interval) for name, interval in sorted(intervals.items())},
+    }
+    text = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=_json_leaf)
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest(), intervals
+
+
+def _json_leaf(value: Any) -> Any:
+    """Turn array and byte leaves into JSON so a tree holding them can be hashed."""
+    if isinstance(value, (bytes, bytearray)):
+        return value.hex()
+    if hasattr(value, "tolist"):
+        return value.tolist()
+    raise TypeError(f"Cannot fingerprint a {type(value).__name__} in an SDF tree")
+
+
+def _basis_holds(part: Part, basis: dict[str, Any]) -> bool:
+    """Whether a cache's envelope, intervals and current values still match its basis."""
+    try:
+        fingerprint, intervals = _basis_fingerprint(part, basis["mode"])
+        values = _current_values(part)
+    except (BBoxInferenceError, TypeError, ValueError):
+        return False
+    if fingerprint != basis.get("fingerprint"):
+        return False
+    # Bounds mode keeps a bounded parameter's whole range, so its value may
+    # move inside it. Relation values are evaluated fresh: a cached one can lag
+    # the parameters it is computed from.
+    return all(lo <= values[name] <= hi for name, (lo, hi) in intervals.items())
+
+
+def _current_values(part: Part) -> dict[str, float]:
+    """Each parameter's value now, with relations evaluated rather than read from cache."""
+    values = part.derived_values()
+    for name, param in part.params.items():
+        if name not in values:
+            values[name] = float(param.numeric_value())
+    return values
 
 
 def _infer_node_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox:
@@ -1005,12 +1161,18 @@ def _mirror_bbox(bbox: BBox, n: Sequence[float], o: Sequence[float]) -> BBox:
 
 
 __all__ = [
+    "BBOX_BASIS_KEY",
     "BBox",
     "BBoxInferenceError",
+    "BBoxSource",
+    "BBoxStatus",
     "UnboundedParamError",
     "UnsupportedExprError",
     "UnsupportedSDFNodeError",
+    "bbox_basis",
     "infer_material_bbox",
     "infer_sdf_bbox",
     "pad_bbox",
+    "stored_bbox",
+    "stored_bbox_status",
 ]

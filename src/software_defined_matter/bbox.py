@@ -22,9 +22,10 @@ Seeding
 -------
 The loose box must actually contain the part. By default it is resolved
 from the part exactly the way the export path resolves its sampling domain
-(:func:`software_defined_matter.grid_sampling.resolve_bbox`): explicit
-``metadata['bbox']`` → analytic ``infer_sdf_bbox(mode='values')`` →
-``metadata['bbox_half_size']``. Pass ``loose=`` to override.
+(:func:`software_defined_matter.grid_sampling.resolve_bbox`): a stored
+``metadata['bbox']`` the part may still use → analytic
+``infer_sdf_bbox(mode='values')`` → ``metadata['bbox_half_size']``. Pass
+``loose=`` to override.
 
 This is the *numeric* sibling of the analytic
 :func:`software_defined_matter.sdf.bbox.infer_sdf_bbox`; see
@@ -46,6 +47,7 @@ from software_defined_matter.grid_sampling import (
     make_grid,
     resolve_bbox,
 )
+from software_defined_matter.sdf.bbox import BBOX_BASIS_KEY, bbox_basis
 
 if TYPE_CHECKING:
     from software_defined_matter.model import Part, SDFTree
@@ -132,11 +134,13 @@ def tighten_part_bbox(
     Convenience over :func:`shrinkwrap_bbox` for the common "tighten this
     part before exporting" flow. The tightened box is written to
     ``part.metadata['bbox']`` when ``persist=True`` so the export / preview
-    sampler picks it up (``resolve_bbox`` prefers explicit metadata).
+    sampler picks it up (``resolve_bbox`` prefers a stored box it may use).
 
-    Note: with ``persist=True`` the new (tight) box becomes the seed for any
-    later tighten call on the same part: re-running is near-idempotent but
-    keep ``pad`` sufficient.
+    Note: the tight box holds only for the parameter values it was taken at,
+    and its ``metadata['bbox_basis']`` record says so. Once a value changes,
+    every reader sets it aside, so a later tighten call seeds from a fresh
+    inference instead of the old box. Re-running on an unchanged part is
+    near-idempotent; keep ``pad`` sufficient.
 
     Raises:
         ValueError: If the part has no materials (no envelope to wrap).
@@ -147,6 +151,9 @@ def tighten_part_bbox(
     box = shrinkwrap_bbox(envelope, part, probe_voxel=probe_voxel, pad=pad, iso=iso)
     if persist:
         part.metadata["bbox"] = [box.min_pt.tolist(), box.max_pt.tolist()]
+        part.metadata[BBOX_BASIS_KEY] = bbox_basis(
+            part, part.metadata["bbox"], source="tightened", mode="values"
+        )
     return box
 
 
