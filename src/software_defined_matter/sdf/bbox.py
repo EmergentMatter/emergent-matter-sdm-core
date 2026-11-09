@@ -148,6 +148,10 @@ def bbox_basis(part: Part, box: Any, *, source: BBoxSource, mode: str) -> dict[s
     the part's envelope with the parameter intervals that ``mode`` takes from
     the part. :func:`stored_bbox_status` recomputes them to judge the box later.
 
+    Use it only for a box just derived from ``part`` as it is now. The record
+    does not check the box, so attached to any other box it would report that
+    box valid without showing that the part fits inside it.
+
     Args:
         part: The part the box was inferred for, as it is now.
         box: The stored corners, ``[[xlo, ylo, zlo], [xhi, yhi, zhi]]``.

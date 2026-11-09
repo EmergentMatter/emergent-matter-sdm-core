@@ -1,14 +1,16 @@
 """A stored bounding box is used only while what it was inferred over still holds.
 
-``Part.infer_bbox_from_sdf`` and ``tighten_part_bbox`` persist a box with a
-``metadata["bbox_basis"]`` record. Every reader of the stored box (sampling,
-export, metric compilation, shader emission, motion bounds) sets such a box
-aside once the part has changed under it, and keeps an authored or unlabelled
-box exactly as stored.
+``Part.infer_bbox_from_sdf`` persists a box with a ``metadata["bbox_basis"]``
+record, and so does ``tighten_part_bbox`` when it tightened inside a box
+derived from the part. Every reader of the stored box (sampling, export,
+metric compilation, shader emission, motion bounds) sets such a box aside once
+the part has changed under it, and keeps an authored or unlabelled box exactly
+as stored.
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 
 import numpy as np
@@ -26,11 +28,13 @@ from software_defined_matter import (
 )
 from software_defined_matter.bbox import tighten_part_bbox
 from software_defined_matter.dsl.expr import _resolve_bbox as metric_domain
+from software_defined_matter.dsl.expr import expr_param, expr_unop
 from software_defined_matter.glsl import emit_glsl
 from software_defined_matter.grid_sampling import material_bbox, resolve_bbox
 from software_defined_matter.motion_bounds import infer_motion_bounds
 from software_defined_matter.sdf.bbox import (
     BBOX_BASIS_KEY,
+    BBoxInferenceError,
     bbox_basis,
     infer_sdf_bbox,
     stored_bbox,
@@ -207,6 +211,68 @@ def test_retightening_after_growth_seeds_from_a_fresh_box_not_the_old_tight_one(
     box = tighten_part_bbox(part, probe_voxel=0.1, pad=0.1)
     assert _contains(box.min_pt, box.max_pt, GROWN_POINT)
     assert stored_bbox_status(part) == "valid"
+
+
+def _tight_box_without_its_record(part: Part) -> None:
+    # The form an earlier version persisted: the tight box and no record.
+    tighten_part_bbox(part, probe_voxel=0.1, pad=0.1)
+    del part.metadata[BBOX_BASIS_KEY]
+
+
+def _tight_box_replaced_by_hand(part: Part) -> None:
+    # The record that stays describes the inferred box, not this one.
+    part.infer_bbox_from_sdf()
+    part.metadata["bbox"] = [[-1.1, -1.1, -1.1], [1.1, 1.1, 1.1]]
+
+
+@pytest.mark.parametrize(
+    "make_unlabelled",
+    [_tight_box_without_its_record, _tight_box_replaced_by_hand],
+    ids=["persisted without a record", "replaced by hand"],
+)
+def test_retightening_inside_an_unlabelled_box_leaves_the_result_unlabelled(
+    make_unlabelled: Callable[[Part], None],
+):
+    part = _ball()
+    make_unlabelled(part)
+    _grow(part)
+    assert stored_bbox_status(part) == "unlabelled"
+    box = tighten_part_bbox(part, probe_voxel=0.1, pad=0.1)
+    # It sampled only inside the old box, so it cannot reach the grown sphere.
+    assert not _contains(box.min_pt, box.max_pt, GROWN_POINT)
+    assert stored_bbox_status(part) == "unlabelled"
+    assert BBOX_BASIS_KEY not in part.metadata
+    # A fresh inference is what gives the part a box it may use as valid.
+    part.infer_bbox_from_sdf()
+    assert stored_bbox_status(part) == "valid"
+    assert _contains(*_domain(part), GROWN_POINT)
+
+
+def test_tightening_inside_an_authored_crop_keeps_it_authored():
+    part = _ball(2.0)
+    part.metadata["bbox"] = [list(corner) for corner in CROP]
+    part.metadata[BBOX_BASIS_KEY] = {"source": "authored"}
+    box = tighten_part_bbox(part, probe_voxel=0.1, pad=0.1)
+    assert not _contains(box.min_pt, box.max_pt, GROWN_POINT)
+    assert stored_bbox_status(part) == "authored"
+
+
+def test_tightening_inside_bbox_half_size_leaves_the_result_unlabelled():
+    # exp() has no interval rule, so analytic inference refuses this radius of 2.
+    radius = expr_unop("exp", expr_param("t"))
+    part = Part(
+        name="ball",
+        params={"t": Param("t", value=math.log(2.0), unit="ratio")},
+        materials=[
+            MaterialRegion(material_id=1, name="m", sdf_tree=sdf_primitive("sphere", r=radius))
+        ],
+        metadata={"bbox_half_size": 0.5},
+    )
+    with pytest.raises(BBoxInferenceError):
+        infer_sdf_bbox(part.computed_envelope(), part, mode="values")
+    box = tighten_part_bbox(part, probe_voxel=0.1, pad=0.1)
+    assert not _contains(box.min_pt, box.max_pt, GROWN_POINT)
+    assert stored_bbox_status(part) == "unlabelled"
 
 
 def _relation_ball() -> Part:
