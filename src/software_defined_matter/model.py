@@ -753,7 +753,8 @@ class Part:
         from software_defined_matter.sdf.param_refs import relation_order
 
         derived = self.derived_params()
-        deps = {n: expr_param_names(p.expr) & set(derived) for n, p in derived.items()}
+        names = set(derived)
+        deps = {n: expr_param_names(p.expr) & names for n, p in derived.items()}
         return relation_order(deps)
 
     def derived_values(self) -> dict[str, float]:
@@ -764,7 +765,6 @@ class Part:
         file is bit-identical to what the traced path computes — a second,
         "simpler" evaluator here is how the cache and the geometry drift apart.
         """
-        from software_defined_matter.dsl.expr import eval_expr_pure
         from software_defined_matter.dsl.resolve import make_binding
 
         if not self.derived_params():
@@ -772,10 +772,11 @@ class Part:
         binding = make_binding(self)
         free_vec = binding.initial_free_vector()
         out: dict[str, float] = {}
+        # The cache belongs to this evaluation only. Keeping traced JAX values
+        # here preserves evaluator parity without leaking them across calls.
+        memo: dict[str, Any] = {}
         for name in self.derived_order():
-            expr = self.params[name].expr
-            assert expr is not None  # derived_order only yields names with an expr
-            out[name] = float(eval_expr_pure(expr, binding, free_vec))
+            out[name] = float(binding._eval_derived(name, free_vec, memo))
         return out
 
     def refresh_derived(self) -> Part:
