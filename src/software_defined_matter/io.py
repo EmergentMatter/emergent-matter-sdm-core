@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import warnings
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,94 @@ def _warn_if_version_mismatch(doc: dict[str, Any]) -> None:
 _SCHEMA_DIR = Path(__file__).parent / "schema"
 
 PathLike = str | os.PathLike
+
+
+def _validate_json_schema(doc: dict[str, Any], schema: dict[str, Any]) -> None:
+    """Reuse successful local reference checks within one immutable document walk.
+
+    Draft 2020-12's unevaluatedProperties checks can revisit the same subtree
+    through several composition branches. A cache scoped to this call avoids
+    exponential work on nested expressions without caching failed validations
+    or reusing results after the caller changes its document.
+    """
+    import jsonschema
+
+    base = jsonschema.validators.validator_for(schema)
+    reference = base.VALIDATORS["$ref"]
+    one_of = base.VALIDATORS["oneOf"]
+    successful: dict[tuple[int, str, str], Any] = {}
+
+    def cached_reference(validator: Any, ref: str, instance: Any, subschema: Any) -> Iterator[Any]:
+        resolver = getattr(validator, "_resolver", None)
+        base_uri = getattr(resolver, "_base_uri", None)
+        if base_uri is None:
+            yield from reference(validator, ref, instance, subschema)
+            return
+        key = (id(instance), ref, base_uri)
+        if key in successful:
+            return
+        b_failed = False
+        for error in reference(validator, ref, instance, subschema):
+            b_failed = True
+            yield error
+        if not b_failed:
+            # Retain the object as well as its identity so a temporary value's
+            # id cannot be recycled during validation of the same document.
+            successful[key] = instance
+
+    def definitely_invalid(validator: Any, instance: Any, alternative: Any) -> bool:
+        # This is only a rejection filter. Compatible branches still undergo
+        # full validation, including constraints not inspected here.
+        if not isinstance(alternative, dict):
+            return alternative is False
+        if "$ref" in alternative:
+            resolver = getattr(validator, "_resolver", None)
+            if resolver is None or not callable(getattr(resolver, "lookup", None)):
+                return False
+            resolved = resolver.lookup(alternative["$ref"]).contents
+            if resolved is not alternative:
+                alternative = resolved
+        if not isinstance(alternative, dict):
+            return alternative is False
+        expected_type = alternative.get("type")
+        if isinstance(expected_type, str) and not validator.TYPE_CHECKER.is_type(
+            instance, expected_type
+        ):
+            return True
+        if isinstance(instance, dict):
+            if any(key not in instance for key in alternative.get("required", [])):
+                return True
+            for key, constraints in alternative.get("properties", {}).items():
+                # String tags discriminate expression and geometry variants.
+                # Restricting this shortcut to strings avoids JSON/Python
+                # differences such as True == 1 in arbitrary const values.
+                if not isinstance(constraints, dict) or key not in instance:
+                    continue
+                tag = constraints.get("const")
+                if isinstance(tag, str) and instance[key] != tag:
+                    return True
+        return False
+
+    def discriminated_one_of(
+        validator: Any, alternatives: Any, instance: Any, subschema: Any
+    ) -> Iterator[Any]:
+        candidates = [
+            (index, alternative)
+            for index, alternative in enumerate(alternatives)
+            if not definitely_invalid(validator, instance, alternative)
+        ]
+        if len(candidates) == 1:
+            index, alternative = candidates[0]
+            if not any(validator.descend(instance, alternative, schema_path=index)):
+                return
+        # The ordinary implementation supplies the complete standard error
+        # context for invalid or ambiguous unions, preserving diagnostics.
+        yield from one_of(validator, alternatives, instance, subschema)
+
+    cached = jsonschema.validators.extend(
+        base, {"$ref": cached_reference, "oneOf": discriminated_one_of}
+    )
+    jsonschema.validate(doc, schema, cls=cached)
 
 
 def _schema_path(version: str) -> Path:
@@ -103,8 +192,6 @@ def validate(source: PathLike | dict[str, Any] | Part | Assembly) -> None:
         software_defined_matter.sdf.param_refs.ParamRelationError: If a
             parameter relation contains a metric or participates in a cycle.
     """
-    import jsonschema
-
     from software_defined_matter.assembly.model import Assembly
     from software_defined_matter.sdf.param_refs import (
         validate_param_refs,
@@ -123,7 +210,7 @@ def validate(source: PathLike | dict[str, Any] | Part | Assembly) -> None:
         with Path(source).open() as fh:
             doc = json.load(fh)
 
-    jsonschema.validate(doc, load_schema(_schema_version_for(doc)))
+    _validate_json_schema(doc, load_schema(_schema_version_for(doc)))
     if doc.get("kind") == "assembly":
         Assembly.from_dict(doc)
         return
