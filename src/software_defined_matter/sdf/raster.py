@@ -74,6 +74,23 @@ def require_literal_raster_params(params: dict[str, Any]) -> None:
             )
 
 
+def _is_scalar_number(value: Any) -> bool:
+    """A real scalar: a Python or NumPy integer or float, or a 0-d real array.
+
+    Booleans are not numbers here, as on the wire. A NumPy ``float32`` pitch
+    computed from a float32 grid is a number, though not a ``float`` subclass.
+    """
+    if isinstance(value, (bool, np.bool_)):
+        return False
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return True
+    return (
+        isinstance(value, np.ndarray)
+        and value.ndim == 0
+        and (np.issubdtype(value.dtype, np.integer) or np.issubdtype(value.dtype, np.floating))
+    )
+
+
 def _is_spacing_number(value: Any) -> bool:
     """A real number, as the wire's ``number``; strings and booleans are not."""
     if isinstance(value, (str, bytes, bool, np.bool_)):
@@ -95,15 +112,19 @@ def normalize_spacing(params: dict[str, Any]) -> tuple[float, float, float]:
     raw = params.get("spacing")
     if raw is None:
         raise ValueError("raster_field requires a 'spacing' param")
-    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+    if _is_scalar_number(raw):
         h = float(raw)
         spacing = (h, h, h)
     else:
-        if isinstance(raw, (str, bytes, bool, np.bool_)) or not hasattr(raw, "__iter__"):
+        if (
+            isinstance(raw, (str, bytes, bool, np.bool_))
+            or (isinstance(raw, np.ndarray) and raw.ndim == 0)
+            or not hasattr(raw, "__iter__")
+        ):
             raise ValueError(f"raster_field 'spacing' must be a number or a 3-list, got {raw!r}")
         entries = list(raw)
         if len(entries) != 3:
-            raise ValueError(f"raster_field 'spacing' must be a scalar or a 3-list, got {raw!r}")
+            raise ValueError(f"raster_field 'spacing' must be a number or a 3-list, got {raw!r}")
         for i, entry in enumerate(entries):
             if not _is_spacing_number(entry):
                 raise ValueError(f"raster_field 'spacing'[{i}] must be a number, got {entry!r}")

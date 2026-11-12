@@ -196,6 +196,9 @@ _MALFORMED_SPACING = [
     [[1.0], 1.0, 1.0],  # a nested entry
     [1.0, 1.0],  # the wrong count
     True,  # a boolean is not a number
+    np.bool_(True),
+    np.array(True),  # a 0-d array that is not a real number
+    np.array("0.5"),
     [1.0, True, 1.0],
     0.0,
     -1.0,
@@ -235,6 +238,9 @@ def test_an_unvalidated_tree_with_malformed_spacing_fails_to_compile(spacing):
         ((1, 1, 1), (1.0, 1.0, 1.0)),
         (np.array([0.5, 1.0, 2.0]), (0.5, 1.0, 2.0)),
         (np.float64(0.5), (0.5, 0.5, 0.5)),
+        (np.float32(0.5), (0.5, 0.5, 0.5)),  # not a float subclass, still a number
+        (np.int64(1), (1.0, 1.0, 1.0)),
+        (np.array(0.5), (0.5, 0.5, 0.5)),  # a 0-d array is a scalar
     ],
 )
 def test_valid_spacing_is_unchanged(spacing, expected):
