@@ -274,6 +274,19 @@ def test_a_helix_reports_unknown():
     assert infer_sdf_max_rate(helix, _part(helix)) == UNKNOWN
 
 
+def test_a_pyramid_reports_unknown():
+    """The pyramid's value jumps across its own base plane (#30), so no finite
+    rate holds on a domain that contains the base, and a unit rate would be a
+    guess."""
+    pyramid = sdf_primitive("pyramid", h=1.5)
+    closure = make_sdf_closure(pyramid, _part(pyramid))
+    free = jnp.asarray(_part(pyramid).param_vector())
+    pts = jnp.asarray([[0.0, -1e-4, 0.0], [0.0, 1e-4, 0.0]], dtype=jnp.float32)
+    values = np.asarray(closure(pts, free))
+    assert abs(values[1] - values[0]) / 2e-4 > 10.0, "the base jump this test documents is gone"
+    assert infer_sdf_max_rate(pyramid, _part(pyramid)) == UNKNOWN
+
+
 def test_a_raster_reports_unknown_whatever_its_samples():
     """A sampled field's rate follows its samples. These are three times a
     distance, so the field changes more than twice as fast as a distance,
