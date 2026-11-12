@@ -1101,18 +1101,13 @@ def sdf_raster_field(
     """
     import numpy as _np
 
-    from software_defined_matter.sdf.raster import encode_raster_data
+    from software_defined_matter.sdf.raster import encode_raster_data, normalize_spacing
 
     arr = _np.asarray(values, dtype=_np.float32)
     if arr.ndim != 3:
         raise ValueError(f"values must be (nz, ny, nx), got shape {arr.shape}")
     nz, ny, nx = arr.shape
-    if isinstance(spacing, (int, float)):
-        spacing_v = [float(spacing)] * 3
-    else:
-        spacing_v = [float(v) for v in spacing]
-        if len(spacing_v) != 3:
-            raise ValueError(f"spacing must be scalar or 3-list, got {spacing!r}")
+    spacing_v = list(normalize_spacing({"spacing": spacing}))
     params: dict[str, Any] = {
         "origin": [float(v) for v in origin],
         "spacing": spacing_v,

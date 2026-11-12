@@ -74,19 +74,61 @@ def require_literal_raster_params(params: dict[str, Any]) -> None:
             )
 
 
+def _is_scalar_number(value: Any) -> bool:
+    """A real scalar: a Python or NumPy integer or float, or a 0-d real array.
+
+    Booleans are not numbers here, as on the wire. A NumPy ``float32`` pitch
+    computed from a float32 grid is a number, though not a ``float`` subclass.
+    """
+    if isinstance(value, (bool, np.bool_)):
+        return False
+    if isinstance(value, (int, float, np.integer, np.floating)):
+        return True
+    return (
+        isinstance(value, np.ndarray)
+        and value.ndim == 0
+        and (np.issubdtype(value.dtype, np.integer) or np.issubdtype(value.dtype, np.floating))
+    )
+
+
+def _is_spacing_number(value: Any) -> bool:
+    """A real number, as the wire's ``number``; strings and booleans are not."""
+    if isinstance(value, (str, bytes, bool, np.bool_)):
+        return False
+    try:
+        float(value)
+    except (TypeError, ValueError):
+        return False
+    return True
+
+
 def normalize_spacing(params: dict[str, Any]) -> tuple[float, float, float]:
-    """Voxel pitch as a per-axis 3-tuple (scalar spacing broadcasts)."""
+    """Voxel pitch as a per-axis 3-tuple (scalar spacing broadcasts).
+
+    Rejects with a ``ValueError`` naming ``spacing`` what the wire contract does
+    not allow: a string or boolean, a nested or non-numeric entry, the wrong
+    count, or a value that is not positive and finite. Nothing is coerced.
+    """
     raw = params.get("spacing")
     if raw is None:
         raise ValueError("raster_field requires a 'spacing' param")
-    if isinstance(raw, (int, float)):
+    if _is_scalar_number(raw):
         h = float(raw)
         spacing = (h, h, h)
     else:
-        values = tuple(float(v) for v in raw)
-        if len(values) != 3:
-            raise ValueError(f"raster_field 'spacing' must be a scalar or a 3-list, got {raw!r}")
-        spacing = (values[0], values[1], values[2])
+        if (
+            isinstance(raw, (str, bytes, bool, np.bool_))
+            or (isinstance(raw, np.ndarray) and raw.ndim == 0)
+            or not hasattr(raw, "__iter__")
+        ):
+            raise ValueError(f"raster_field 'spacing' must be a number or a 3-list, got {raw!r}")
+        entries = list(raw)
+        if len(entries) != 3:
+            raise ValueError(f"raster_field 'spacing' must be a number or a 3-list, got {raw!r}")
+        for i, entry in enumerate(entries):
+            if not _is_spacing_number(entry):
+                raise ValueError(f"raster_field 'spacing'[{i}] must be a number, got {entry!r}")
+        spacing = (float(entries[0]), float(entries[1]), float(entries[2]))
     if any(not math.isfinite(h) or h <= 0.0 for h in spacing):
         raise ValueError(f"raster_field 'spacing' must be positive, got {raw!r}")
     return spacing
