@@ -115,7 +115,8 @@ a discovery aid. For the current default of any of them, read
 
 | key | effect |
 |---|---|
-| `bbox` | explicit `[[xlo,ylo,zlo],[xhi,yhi,zhi]]`; exact, unpadded, and takes precedence over inference |
+| `bbox` | explicit `[[xlo,ylo,zlo],[xhi,yhi,zhi]]`; exact, unpadded, and takes precedence over inference, unless `bbox_basis` shows it was inferred for a part that has since changed |
+| `bbox_basis` | written beside `bbox` by `Part.infer_bbox_from_sdf`, and by `tighten_part_bbox` when it tightened inside a box derived from the part: what the box was inferred over. `{"source": "authored"}` marks a box you chose. See `sdf.bbox.stored_bbox` |
 | `metric_voxel_size` | target voxel size in mm, giving constant part sampling density |
 | `grid_resolution` | per-axis sample count, used when `metric_voxel_size` is unset |
 | `metric_grid_cap` | per-axis cap on sample count, as a memory guard |

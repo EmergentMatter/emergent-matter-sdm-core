@@ -34,7 +34,7 @@ from typing import Any, NamedTuple
 import numpy as np
 
 from software_defined_matter.model import Part, SDFTree
-from software_defined_matter.sdf.bbox import BBox, infer_sdf_bbox
+from software_defined_matter.sdf.bbox import BBox, infer_sdf_bbox, stored_bbox
 
 # The 2-D curve primitives, which have no PrimSpec because they are not lib
 # functions: each evaluates as the exact polygon SDF of its own sampled
@@ -2616,8 +2616,8 @@ def _uniform_declarations(uniforms: Iterable[UniformDecl]) -> list[str]:
 
 
 def _resolve_bbox(part: Part, tree: SDFTree) -> BBox:
-    """Honour ``part.metadata['bbox']`` if present, else infer."""
-    meta_bbox = part.metadata.get("bbox")
+    """Honour ``part.metadata['bbox']`` while the part may still use it, else infer."""
+    meta_bbox = stored_bbox(part)
     if meta_bbox is not None:
         lo, hi = meta_bbox
         lx, ly, lz = (float(x) for x in lo)

@@ -22,9 +22,10 @@ Seeding
 -------
 The loose box must actually contain the part. By default it is resolved
 from the part exactly the way the export path resolves its sampling domain
-(:func:`software_defined_matter.grid_sampling.resolve_bbox`): explicit
-``metadata['bbox']`` → analytic ``infer_sdf_bbox(mode='values')`` →
-``metadata['bbox_half_size']``. Pass ``loose=`` to override.
+(:func:`software_defined_matter.grid_sampling.resolve_bbox`): a stored
+``metadata['bbox']`` the part may still use → analytic
+``infer_sdf_bbox(mode='values')`` → ``metadata['bbox_half_size']``. Pass
+``loose=`` to override.
 
 This is the *numeric* sibling of the analytic
 :func:`software_defined_matter.sdf.bbox.infer_sdf_bbox`; see
@@ -45,6 +46,14 @@ from software_defined_matter.grid_sampling import (
     eval_chunked,
     make_grid,
     resolve_bbox,
+)
+from software_defined_matter.sdf.bbox import (
+    BBOX_BASIS_KEY,
+    BBoxInferenceError,
+    BBoxStatus,
+    bbox_basis,
+    infer_sdf_bbox,
+    stored_bbox_status,
 )
 
 if TYPE_CHECKING:
@@ -132,11 +141,20 @@ def tighten_part_bbox(
     Convenience over :func:`shrinkwrap_bbox` for the common "tighten this
     part before exporting" flow. The tightened box is written to
     ``part.metadata['bbox']`` when ``persist=True`` so the export / preview
-    sampler picks it up (``resolve_bbox`` prefers explicit metadata).
+    sampler picks it up (``resolve_bbox`` prefers a stored box it may use).
 
-    Note: with ``persist=True`` the new (tight) box becomes the seed for any
-    later tighten call on the same part: re-running is near-idempotent but
-    keep ``pad`` sufficient.
+    Note: the tight box holds only for the parameter values it was taken at,
+    and its ``metadata['bbox_basis']`` record says so. Once a value changes,
+    every reader sets it aside, so a later tighten call seeds from a fresh
+    inference instead of the old box. Re-running on an unchanged part is
+    near-idempotent; keep ``pad`` sufficient.
+
+    The record is written only when the seed box was derived from the part:
+    a stored box whose record still holds, or a fresh analytic inference. A
+    box tightened inside an authored or unlabelled stored box, or inside
+    ``metadata['bbox_half_size']``, is only as complete as that seed, and
+    nothing shows the part fits inside it. So an authored box stays
+    authored, and any other is left unlabelled rather than reported valid.
 
     Raises:
         ValueError: If the part has no materials (no envelope to wrap).
@@ -144,10 +162,39 @@ def tighten_part_bbox(
     envelope = part.computed_envelope()
     if envelope is None:
         raise ValueError(f"Part {part.name!r} has no materials; nothing to tighten.")
-    box = shrinkwrap_bbox(envelope, part, probe_voxel=probe_voxel, pad=pad, iso=iso)
+    status = stored_bbox_status(part)
+    loose, derived = _tighten_seed(envelope, part, status)
+    box = shrinkwrap_bbox(envelope, part, loose=loose, probe_voxel=probe_voxel, pad=pad, iso=iso)
     if persist:
         part.metadata["bbox"] = [box.min_pt.tolist(), box.max_pt.tolist()]
+        if derived:
+            part.metadata[BBOX_BASIS_KEY] = bbox_basis(
+                part, part.metadata["bbox"], source="tightened", mode="values"
+            )
+        elif status != "authored":
+            # No record may describe a box other than the one stored.
+            part.metadata.pop(BBOX_BASIS_KEY, None)
     return box
+
+
+def _tighten_seed(envelope: SDFTree, part: Part, status: BBoxStatus) -> tuple[BBox3, bool]:
+    """The seed box for :func:`tighten_part_bbox`, and whether it was derived from the part.
+
+    The order is :func:`~software_defined_matter.grid_sampling.resolve_bbox`'s.
+    A stored box whose record still holds and a fresh analytic inference are
+    derived from the part; an authored or unlabelled stored box and
+    ``metadata['bbox_half_size']`` are domains someone chose.
+    """
+    if status in ("absent", "stale"):
+        try:
+            lo, hi = infer_sdf_bbox(envelope, part, mode="values")
+        except BBoxInferenceError:
+            pass  # resolve_bbox falls back to bbox_half_size, or raises.
+        else:
+            return BBox3(
+                min_pt=np.asarray(lo, dtype=float), max_pt=np.asarray(hi, dtype=float)
+            ), True
+    return resolve_bbox(envelope, part), status == "valid"
 
 
 __all__ = [

@@ -18,7 +18,10 @@ Two concerns:
        →  metadata ``bbox_half_size``  →  raise :class:`BBoxResolutionError`
 
    Explicit metadata wins first because authors set it deliberately (the
-   inferred box is conservative and may want overriding). The remaining
+   inferred box is conservative and may want overriding). A stored box that
+   was inferred rather than authored is used only while its
+   ``metadata["bbox_basis"]`` still matches the part
+   (:func:`software_defined_matter.sdf.bbox.stored_bbox`). The remaining
    case where inference cannot succeed is param-dependent rotation
    (``rotate_x|y|z|matrix`` with an ``angle`` / ``R`` that is a ``$ref``),
    which the inferrer refuses rather than guessing. The export path lets
@@ -34,7 +37,12 @@ import jax.numpy as jnp
 import numpy as np
 
 from software_defined_matter.grid_sampling.types import BBox3, SDFFunc
-from software_defined_matter.sdf.bbox import BBoxInferenceError, infer_sdf_bbox
+from software_defined_matter.sdf.bbox import (
+    BBoxInferenceError,
+    infer_sdf_bbox,
+    stored_bbox,
+    stored_bbox_status,
+)
 from software_defined_matter.sdf.compile import make_sdf_closure
 
 if TYPE_CHECKING:
@@ -63,10 +71,12 @@ def bind_sdf(tree: SDFTree, part: Part) -> SDFFunc:
 def resolve_bbox(tree: SDFTree, part: Part) -> BBox3:
     """Resolve a finite :class:`BBox3` for ``tree`` (fail-loud fallback chain).
 
-    Order: explicit metadata ``bbox`` → ``infer_sdf_bbox(mode="values")``
-    → metadata ``bbox_half_size`` → raise :class:`BBoxResolutionError`.
+    Order: a metadata ``bbox`` the part may still use
+    (:func:`~software_defined_matter.sdf.bbox.stored_bbox`) →
+    ``infer_sdf_bbox(mode="values")`` → metadata ``bbox_half_size`` → raise
+    :class:`BBoxResolutionError`.
     """
-    md_bbox = part.metadata.get("bbox")
+    md_bbox = stored_bbox(part)
     if md_bbox is not None:
         lo, hi = md_bbox
         return BBox3(
@@ -92,8 +102,14 @@ def resolve_bbox(tree: SDFTree, part: Part) -> BBox3:
             max_pt=np.array([h, h, h], dtype=float),
         )
 
+    no_box = (
+        "the stored metadata 'bbox' was set aside because its 'bbox_basis' "
+        "no longer matches the part"
+        if stored_bbox_status(part) == "stale"
+        else "no metadata 'bbox'"
+    )
     raise BBoxResolutionError(
-        "Cannot resolve a finite sampling domain: no metadata 'bbox', "
+        f"Cannot resolve a finite sampling domain: {no_box}, "
         f"per-material inference failed ({infer_err}), and no metadata "
         "'bbox_half_size'. Add an explicit metadata['bbox'] = [[xlo,ylo,zlo],"
         "[xhi,yhi,zhi]] (typically needed for param-dependent rotation, "

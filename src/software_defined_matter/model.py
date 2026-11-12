@@ -820,9 +820,12 @@ class Part:
 
         The envelope is produced by :meth:`computed_envelope`. By default, the
         inferred bbox is written to ``metadata["bbox"]`` so existing sampling
-        and meshing paths can consume it directly.
+        and meshing paths can consume it directly, with a ``metadata["bbox_basis"]``
+        record of what it was inferred over. Those paths set the box aside once
+        the record no longer matches the part
+        (:func:`software_defined_matter.sdf.bbox.stored_bbox`).
         """
-        from software_defined_matter.sdf.bbox import infer_sdf_bbox
+        from software_defined_matter.sdf.bbox import BBOX_BASIS_KEY, bbox_basis, infer_sdf_bbox
 
         envelope = self.computed_envelope()
         if envelope is None:
@@ -830,6 +833,9 @@ class Part:
         bbox = infer_sdf_bbox(envelope, self)
         if persist_to_metadata:
             self.metadata["bbox"] = [list(bbox[0]), list(bbox[1])]
+            self.metadata[BBOX_BASIS_KEY] = bbox_basis(
+                self, self.metadata["bbox"], source="inferred", mode="bounds"
+            )
         return bbox
 
     def update_from_vector(self, values: list[Number]) -> None:

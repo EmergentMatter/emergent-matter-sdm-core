@@ -33,6 +33,7 @@ from software_defined_matter.sdf.bbox import (
     _interval_unop,
     _points_to_bbox,
     _vec3,
+    stored_bbox,
 )
 
 __all__ = ["BodyMotionBounds", "FlexureMotionBounds", "MotionBounds", "infer_motion_bounds"]
@@ -378,7 +379,9 @@ def infer_motion_bounds(
     enclose their owned material. Blend weights cover all of [0, 1].
     Set include_flexures=True only when consuming the returned flexure list;
     the default rejects flexures to protect existing body-only consumers. An
-    authored ``metadata.bbox`` is included in the scene envelope. If rest-field
+    authored ``metadata.bbox`` is included in the scene envelope; a stored box
+    that was inferred counts only while its ``metadata.bbox_basis`` still
+    matches the part. If rest-field
     inference fails, that authored box must cover the body's entire motion, and
     the body's box remains None to disable unsafe pruning. Motion expressions
     that cannot be bounded fail even with an authored box. Smoothed unions and
@@ -398,7 +401,7 @@ def infer_motion_bounds(
     assert block is not None
     if block.get("flexures") and not include_flexures:
         raise BBoxInferenceError("Flexure motion bounds require include_flexures=True")
-    authored = part.metadata.get("bbox")
+    authored = stored_bbox(part)
     if authored is not None:
         if len(authored) != 2 or any(len(c) != 3 for c in authored):
             raise BBoxInferenceError("metadata.bbox must contain two finite 3-D corners")

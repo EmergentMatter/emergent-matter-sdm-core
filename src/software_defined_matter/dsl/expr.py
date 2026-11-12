@@ -28,8 +28,8 @@ Node shapes
 Metric sampling domain (caveat)
 -------------------------------
 :func:`compile_expr` resolves the integration box via :func:`_resolve_bbox`
-(explicit ``metadata["bbox"]`` > inference at current param values, taken over
-the part's *envelope* rather than the part), then hands it to
+(a ``metadata["bbox"]`` the part may still use > inference at current param
+values, taken over the part's *envelope* rather than the part), then hands it to
 :func:`~software_defined_matter.objectives.metrics.cubic_grid`, which grows it
 to a whole number of cubic cells. The box is **never traced**: it is a
 constant w.r.t. ``free_vec``, so gradients are clean. But its *tightness is
@@ -459,14 +459,16 @@ def _resolve_bbox(part: Part, envelope_tree: SDFTree | None) -> tuple:
     Fails loud on geometry the inferrer cannot reason about (today,
     param-dependent rotation): a silently fabricated domain in an
     optimisation loop corrupts every integral metric with no signal. The
-    fix is to state the domain explicitly via ``metadata["bbox"]``.
+    fix is to state the domain explicitly via ``metadata["bbox"]``. A stored
+    box that was inferred rather than authored counts only while its basis
+    still matches the part (:func:`software_defined_matter.sdf.bbox.stored_bbox`).
     """
-    override = part.metadata.get("bbox")
+    from software_defined_matter.sdf.bbox import BBoxInferenceError, infer_sdf_bbox, stored_bbox
+
+    override = stored_bbox(part)
     if override is not None:
         lo, hi = override
         return (tuple(lo), tuple(hi))
-
-    from software_defined_matter.sdf.bbox import BBoxInferenceError, infer_sdf_bbox
 
     target = envelope_tree if envelope_tree is not None else part.computed_envelope()
     if target is None:
