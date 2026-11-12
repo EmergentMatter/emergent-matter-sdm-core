@@ -10,8 +10,6 @@ On adoption, this record qualifies the source-retention policy described in [the
 
 A sampled field can arise from a numerical design process that has no equivalent analytic expression tree. Requiring such a tree as the permanent source would exclude a useful retained definition even when the saved geometry can be reconstructed and checked by its intended consumers.
 
-At the source this record was drafted against, the sampled-field record's status line still reads `proposed for review`, while the `raster_field` primitive it describes ships in every released schema from 0.3 onward. This record qualifies that record's source-retention clause only; it leaves the earlier record's status and bytes unchanged.
-
 The existing sampled-field route can also be a cache of an analytic construction. These roles must remain distinguishable. Allowing retained samples must not silently promote every bake, optimization field or mesh cache to the authoritative design.
 
 A readable file does not by itself establish geometric fidelity, physical distance accuracy or safe use by every query algorithm. A density value, a distance sample and a bound on field variation are different objects. The format must preserve its existing interpretation, while an application owns the evidence for its engineering claims.
@@ -23,6 +21,8 @@ A readable file does not by itself establish geometric fidelity, physical distan
 An authoring application may designate a supported sampled hard field as the retained geometry definition. It need not retain an analytic expression tree that did not produce the definition. When an analytic construction remains authoritative, a bake remains derived from that construction.
 
 The designation must identify the exact retained artifact and distinguish it from numerical working state. A hard material region has the declared categorical membership and boundary semantics. This does not mean that its stored scalar samples must be binary. Relaxed material fractions or arbitrary optimization variables are not accepted hard geometry merely because they can be stored as numbers.
+
+This decision does not define where a file records that role. A retained definition and a bake are both `raster_field` nodes and look the same to a reader of the file alone; the marker that tells them apart, for example a key in the node's `provenance` object, is left to a later decision. Until then, the application's acceptance profile records which artifact it retains.
 
 Available generating inputs, methods and ancestry remain provenance. Reconstruction of the retained geometry must not depend on an unavailable generator or an external sample file. Reproducing the full design campaign is a separate evidence question; primary retention does not claim that the whole campaign is portable or reproducible from the geometry alone.
 
@@ -44,7 +44,7 @@ An application claiming retained-primary use must identify its profile for artif
 - Encoding and precision, the relevant geometric and numerical error claims, and the operations for which the artifact is qualified.
 - Identity-bound evidence or explicit unavailable/unsupported outcomes for those claims.
 
-These are acceptance information requirements, not new mandatory wire fields. Existing metadata and provenance containers may carry declarations. The wire rejects unknown raster parameter keys, so declarations belong inside the node's `provenance` object or the part's `metadata`. Declarations in `metadata` must not reuse a key the package already reads; `computed_envelope()`, for example, takes its smoothing from `metadata["envelope_smooth_k"]`. At the source this record was drafted against, `io.validate` and `io.load` accept a stored content hash that no longer matches the samples it accompanies. Application records may hold supporting evidence without making the geometry depend on an external sample payload. Do not duplicate an entire campaign ledger in every file.
+These are acceptance information requirements, not new mandatory wire fields. Existing metadata and provenance containers may carry declarations. The wire rejects unknown raster parameter keys, so declarations belong inside the node's `provenance` object or the part's `metadata`. Declarations in `metadata` must not reuse a key the package already reads; `computed_envelope()`, for example, takes its smoothing from `metadata["envelope_smooth_k"]`. Application records may hold supporting evidence without making the geometry depend on an external sample payload. Do not duplicate an entire campaign ledger in every file.
 
 Native validation does not enforce this application profile by virtue of this decision. A document may remain valid under the wire contract while being unacceptable for an application's retained-primary or engineering claim. Any later proposal for universal validation of additional provenance must identify its compatibility and schema consequences separately.
 
@@ -60,7 +60,7 @@ Changing encoding, resampling, repairing or reinitializing a field must preserve
 
 No wire extension is introduced by this decision. Apply [schema-versioning.md](../schema-versioning.md) to any actual implementation change. New dispatch vocabulary and wire content require the corresponding version treatment. Rejecting always-malformed input is distinct from making previously valid documents invalid. Released schema files remain unchanged.
 
-On adoption, update the two docstrings that state that the analytic construction stays the source of truth, in the bake helper `sdf/bake.py` and the `raster_field` evaluator in `sdf/sdf_shapes.py`, to reference this decision, without rewriting earlier ADRs or changing numerical behavior by implication. Follow the normal contribution and release process for documentation and any separately proposed code change.
+Follow the normal contribution and release process for documentation and any separately proposed code change.
 
 ## Consequences
 
