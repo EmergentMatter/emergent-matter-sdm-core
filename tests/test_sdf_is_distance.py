@@ -222,6 +222,17 @@ KNOWN_BOUNDS: dict[str, str] = {
 }
 
 
+# Primitives whose VALUE jumps somewhere. The gradient audit above cannot see
+# that: the autodiff gradient stays finite on both sides of a jump (#32). Each
+# entry names a witness, the parameters and two points 0.2 um apart, where the
+# value must change by far more than that distance. Fix the primitive and
+# ``test_known_value_jumps_list_is_current`` fails until the entry is deleted.
+KNOWN_VALUE_JUMPS: dict[str, tuple[dict, list[float], list[float]]] = {
+    # Measures to the slanted faces only, never to the base square (#30).
+    "pyramid": ({"h": 1.5}, [0.0, -1e-4, 0.0], [0.0, 1e-4, 0.0]),
+}
+
+
 def _rates(name, kwargs, half, dim):
     """Return (near-surface max rate, whole-domain max rate).
 
@@ -378,3 +389,28 @@ def test_every_registered_primitive_is_audited():
         f"tables in tests/conftest.py: {missing}. Add representative "
         f"parameters so they are audited."
     )
+
+
+def test_known_value_jumps_list_is_current():
+    """Every listed primitive still jumps at its witness. Fix one and this
+    fails until its entry here and its rate declaration are deleted, the same
+    self-cleaning rule as ``test_known_over_reporting_list_is_current``."""
+    for name, (kwargs, a, b) in KNOWN_VALUE_JUMPS.items():
+        values = np.asarray(_PRIMITIVES[name](jnp.asarray([a, b]), **kwargs))
+        step = float(np.linalg.norm(np.subtract(b, a)))
+        assert abs(values[1] - values[0]) > 100.0 * step, (
+            f"{name} no longer jumps at its witness: delete it from "
+            f"KNOWN_VALUE_JUMPS and from _PRIMITIVES_WITHOUT_UNIT_RATE"
+        )
+
+
+def test_rate_declarations_match_the_audit_exceptions():
+    """``infer_sdf_max_rate`` declares exactly the primitives this audit
+    exempts or knows to jump in value, so none of them can report a unit rate
+    and an entry no longer needed fails here; it names only real primitives."""
+    from software_defined_matter.sdf.lipschitz import _PRIMITIVES_WITHOUT_UNIT_RATE
+
+    sampled = {c[1] for c in _SAMPLED_CASES}
+    exempt = set(KNOWN_BOUNDS) | set(KNOWN_OVER_REPORTING) | sampled
+    assert set(_PRIMITIVES_WITHOUT_UNIT_RATE) == exempt | set(KNOWN_VALUE_JUMPS)
+    assert set(_PRIMITIVES_WITHOUT_UNIT_RATE) <= set(_PRIMITIVES)
