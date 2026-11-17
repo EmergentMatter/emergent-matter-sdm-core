@@ -27,6 +27,13 @@ The third is read off the **projection residual**: step from ``p`` along the
 gradient by the reported value, to ``q = p - f(p) * grad f(p)``. An exact
 distance lands on the surface, so ``|f(q)| / |f(p)|`` is zero up to rounding.
 
+Neither check sees a field that measures to the wrong part of its own surface.
+Below ``pyramid``'s base the value is the distance to a slanted face: its
+gradient has unit length and the projection lands on that face, a real surface
+point. What gives it away is a **jump in value** across the face it never
+measures to (#32). So values are also compared at pairs of nearby points, and a
+pair whose value changes far faster than any rate could explain is a jump.
+
 Gradients are also checked on a grid of round-number coordinates. Random
 samples never land exactly on a face, an edge or the Z axis, which is where a
 bare ``sqrt`` of a squared distance has an infinite derivative; part
@@ -106,6 +113,18 @@ SEED = 0
 
 SIDES = ("outside", "inside")
 
+# Nearby pairs for the value-jump check sit this fraction of the sampling
+# half-extent apart. Every sample anchors one pair in a random direction, and
+# every near-surface sample anchors JUMP_DIRECTIONS_NEAR more, since a face the
+# field never measures to is still part of the surface.
+JUMP_STEP_FRAC = 0.002
+JUMP_DIRECTIONS_NEAR = 16
+
+# A pair whose value changes by more than this many times its separation is a
+# jump. Far above the largest genuine rate any field here reaches (about 3.4,
+# a taper over-reporting), far below a real jump (pyramid's base: ~38).
+JUMP_RATIO = 10.0
+
 # Values are O(10) mm in float32 (JAX's default), whose spacing there is ~1e-6.
 FLOAT32_ATOL = 2e-5
 
@@ -121,7 +140,8 @@ class Audit:
 
     ``miss_outside`` / ``miss_inside`` are the fractions of samples on that side
     whose projection missed the surface, or ``None`` when the side had too few
-    samples to judge.
+    samples to judge. ``jump_ratio`` is the largest change in value across a
+    nearby pair, divided by the pair's separation.
     """
 
     near_max: float
@@ -130,6 +150,11 @@ class Audit:
     miss_outside: float | None
     miss_inside: float | None
     n_nonfinite: int
+    jump_ratio: float
+
+    @property
+    def jumps(self) -> bool:
+        return self.jump_ratio > JUMP_RATIO
 
     def misses(self, side: str) -> bool:
         miss = self.miss_outside if side == "outside" else self.miss_inside
@@ -194,7 +219,30 @@ def _measure(label, scalar, half, dim) -> Audit:
         miss_outside=miss(d > 0),
         miss_inside=miss(d < 0),
         n_nonfinite=int((~finite).sum()),
+        jump_ratio=_jump_ratio(scalar, np.asarray(p), d, half, rng),
     )
+
+
+def _jump_ratio(scalar, p, d, half, rng) -> float:
+    """Largest ``|f(b) - f(a)| / |b - a|`` over pairs of points ``|b - a|`` apart.
+
+    Anchored on every sample whose VALUE is finite, whether or not its gradient
+    is: a sweep's interior has NaN gradients (#36) and a finite, wrong value,
+    and that interior is exactly where its end caps jump. Seeded, so the same
+    pairs every run.
+    """
+    keep = np.isfinite(d)
+    p, d = p[keep], d[keep]
+    near = np.argsort(np.abs(d))[: max(int(NEAR_SURFACE_FRACTION * d.size), 100)]
+    step = JUMP_STEP_FRAC * half
+    dim = p.shape[1]
+    anchors = np.concatenate([p, np.repeat(p[near], JUMP_DIRECTIONS_NEAR, axis=0)])
+    base = np.concatenate([d, np.repeat(d[near], JUMP_DIRECTIONS_NEAR)])
+    u = rng.normal(size=(len(anchors), dim))
+    u /= np.linalg.norm(u, axis=1, keepdims=True)
+    moved = np.asarray(jax.vmap(scalar)(jnp.asarray(anchors + step * u)))
+    change = np.abs(moved - base)
+    return float(np.nanmax(change[np.isfinite(change)]) / step)
 
 
 def _round_grid(half, dim):
@@ -291,6 +339,11 @@ STRESS_VARIANTS.update(
         ],
         "capped_cone": [
             ({"h": 8.0, "r1": 8.0, "r2": 0.0}, 12.0),  # degenerate tip
+        ],
+        # A normal that is not unit length, as a $ref or an optimiser can leave
+        # it. The docstring asks for a unit normal; nothing enforces it (#31).
+        "plane": [
+            ({"n": [0.0, 0.0, 3.0], "h": 0.0}, 11.0),
         ],
         "helix": [
             # The wall-rate defect scales as (r/major_r) * sin(lead)^2, so the 5.2
@@ -391,7 +444,16 @@ STRESS_VARIANTS.update(
 # #108 closed. ``test_known_over_reporting_list_is_current`` fails if an entry
 # here has actually been fixed, so the list cannot rot; add to it only to record
 # a defect that is genuinely still open.
-KNOWN_OVER_REPORTING: dict[str, str] = {}
+KNOWN_OVER_REPORTING: dict[str, str] = {
+    "plane": "dot(p, n) + h with n as authored: changes by |n| per unit (#31)",
+}
+
+# Of the above, those whose rate depends on a parameter rather than on the kind.
+# ``infer_sdf_max_rate`` cannot list them in its per-kind table, so they are
+# excused from matching it; its module docstring states each one instead.
+PARAMETER_DEPENDENT_RATE: dict[str, str] = {
+    "plane": "exact for a unit normal; the rate is |n| (#31)",
+}
 
 # Primitives that are correct at the surface but knowingly over-report
 # elsewhere, with the reason. Exempt from the whole-domain check only.
@@ -411,14 +473,13 @@ KNOWN_BOUNDS: dict[str, str] = {
     "helix": "tangent-line tube; over-reports up to 2.7x near the Z axis",
 }
 
-# Primitives whose VALUE jumps somewhere. The gradient audit above cannot see
-# that: the autodiff gradient stays finite on both sides of a jump (#32). Each
-# entry names a witness, the parameters and two points 0.2 um apart, where the
-# value must change by far more than that distance. Fix the primitive and
-# ``test_known_value_jumps_list_is_current`` fails until the entry is deleted.
-KNOWN_VALUE_JUMPS: dict[str, tuple[dict, list[float], list[float]]] = {
-    # Measures to the slanted faces only, never to the base square (#30).
-    "pyramid": ({"h": 1.5}, [0.0, -1e-4, 0.0], [0.0, 1e-4, 0.0]),
+# Primitives whose VALUE jumps somewhere. Neither the rate nor the projection
+# sees that (see the module docstring); the nearby-pair check does (#32). Fix
+# the primitive and ``test_known_value_jumps_list_is_current`` fails until the
+# entry here, and its rate declaration in ``sdf/lipschitz.py``, are deleted.
+KNOWN_VALUE_JUMPS: dict[str, str] = {
+    "pyramid": "measures to the slanted faces only, never to the base square (#30)",
+    "helix": "on its own axis the value depends on the approach azimuth; see KNOWN_BOUNDS",
 }
 
 _TPMS = ("gyroid", "schwarz_p", "schwarz_d", "neovius", "lidinoid")
@@ -453,6 +514,7 @@ KNOWN_NOT_DISTANCES: dict[str, tuple[frozenset[str], str]] = {
     "screw_thread":   (_OUTSIDE, "max of half-planes in the tooth frame: short near the "
                                  "tooth corners (#38)"),
     "box_frame":      (_INSIDE, "union of three edge boxes: min is short inside (#37)"),
+    "plane":          (_BOTH, "a non-unit normal scales the value by |n| (#31)"),
 }
 
 # Primitives with a non-finite value or gradient, on random samples or on the
@@ -570,6 +632,21 @@ def test_primitive_never_over_reports_anywhere(case):
         f"{name} {kwargs}: whole-domain rate {overall:.3f}. It is correct at "
         f"the surface but over-reports elsewhere: either fix it, or record it "
         f"in KNOWN_BOUNDS with the reason."
+    )
+
+
+_JUMP_CASES = [c for c in _DISTANCE_CASES if c[1] not in KNOWN_VALUE_JUMPS]
+
+
+@pytest.mark.parametrize("case", _JUMP_CASES, ids=_ids(_JUMP_CASES))
+def test_primitive_value_does_not_jump(case):
+    _, name, kwargs, half, _ = case
+    ratio = _primitive_audit(case[0]).jump_ratio
+    assert ratio <= JUMP_RATIO, (
+        f"{name} {kwargs}: two points {JUMP_STEP_FRAC * half:.3g} apart differ in "
+        f"value by {ratio:.1f}x their separation. The value jumps, usually because "
+        f"some face of the solid is never measured to. Fix it, or list it in "
+        f"KNOWN_VALUE_JUMPS with the cause."
     )
 
 
@@ -715,16 +792,15 @@ def test_known_nonfinite_list_is_current():
 
 
 def test_known_value_jumps_list_is_current():
-    """Every listed primitive still jumps at its witness. Fix one and this
-    fails until its entry here and its rate declaration are deleted, the same
-    self-cleaning rule as ``test_known_over_reporting_list_is_current``."""
-    for name, (kwargs, a, b) in KNOWN_VALUE_JUMPS.items():
-        values = np.asarray(_PRIMITIVES[name](jnp.asarray([a, b]), **kwargs))
-        step = float(np.linalg.norm(np.subtract(b, a)))
-        assert abs(values[1] - values[0]) > 100.0 * step, (
-            f"{name} no longer jumps at its witness: delete it from "
-            f"KNOWN_VALUE_JUMPS and from _PRIMITIVES_WITHOUT_UNIT_RATE"
-        )
+    """Every listed primitive still jumps at one of its parameter sets. Fix one
+    and this fails until its entry here and its rate declaration are deleted,
+    the same self-cleaning rule as ``test_known_over_reporting_list_is_current``."""
+    still = {c[1] for c in _DISTANCE_CASES if _primitive_audit(c[0]).jumps}
+    fixed = sorted(set(KNOWN_VALUE_JUMPS) - still)
+    assert not fixed, (
+        f"No longer jump in value; delete from KNOWN_VALUE_JUMPS and from "
+        f"_PRIMITIVES_WITHOUT_UNIT_RATE: {fixed}"
+    )
 
 
 def test_primitive_tables_name_real_primitives():
@@ -732,6 +808,7 @@ def test_primitive_tables_name_real_primitives():
         KNOWN_OVER_REPORTING,
         KNOWN_BOUNDS,
         KNOWN_VALUE_JUMPS,
+        PARAMETER_DEPENDENT_RATE,
         KNOWN_UNDER_REPORTING,
         KNOWN_NOT_DISTANCES,
         KNOWN_NONFINITE,
@@ -759,7 +836,8 @@ def test_rate_declarations_match_the_audit_exceptions():
     from software_defined_matter.sdf.lipschitz import _PRIMITIVES_WITHOUT_UNIT_RATE
 
     sampled = {c[1] for c in _SAMPLED_CASES}
-    exempt = set(KNOWN_BOUNDS) | set(KNOWN_OVER_REPORTING) | sampled
+    over = set(KNOWN_OVER_REPORTING) - set(PARAMETER_DEPENDENT_RATE)
+    exempt = set(KNOWN_BOUNDS) | over | sampled
     assert set(_PRIMITIVES_WITHOUT_UNIT_RATE) == exempt | set(KNOWN_VALUE_JUMPS)
     assert set(_PRIMITIVES_WITHOUT_UNIT_RATE) <= set(_PRIMITIVES)
 
@@ -1005,6 +1083,12 @@ OP_KNOWN_NOT_DISTANCES: dict[str, tuple[frozenset[str], str]] = {
     "sweep-box-corner-60":             (_OUTSIDE, "ball joint (#42), and the end caps (#36)"),
 }
 
+# Value jumps somewhere: the nearby-pair check (#32).
+_CAP_JUMP = "inside the tube the value ignores the end caps, so it jumps across each cap (#36)"
+OP_KNOWN_VALUE_JUMPS: dict[str, str] = dict.fromkeys(
+    (c for c in _SWEEPS if c != "sweep-circle-bspline-loop"), _CAP_JUMP
+)
+
 # Non-finite value or gradient, on random samples or on the round-number grid.
 OP_KNOWN_NONFINITE: dict[str, str] = {
     **dict.fromkeys(_SWEEPS, _SWEEP_NAN),
@@ -1064,6 +1148,19 @@ def test_op_does_not_over_report(case_id):
         f"{case_id}: the value changes by up to {near:.3f} per unit of travel near "
         f"the surface, so it over-reports distance by ~{near:.2f}x. Fix the op, or "
         f"list the case in OP_KNOWN_OVER_REPORTING with the cause."
+    )
+
+
+_OP_JUMP_IDS = [c for c in OP_IDS if c not in OP_KNOWN_VALUE_JUMPS]
+
+
+@pytest.mark.parametrize("case_id", _OP_JUMP_IDS)
+def test_op_value_does_not_jump(case_id):
+    ratio = _op_audit(case_id).jump_ratio
+    assert ratio <= JUMP_RATIO, (
+        f"{case_id}: nearby points differ in value by {ratio:.1f}x their "
+        f"separation, so the value jumps. Fix it, or list the case in "
+        f"OP_KNOWN_VALUE_JUMPS with the cause."
     )
 
 
@@ -1141,6 +1238,11 @@ def test_op_known_not_distances_is_current():
     assert not fixed, f"Now distances on these sides; delete from OP_KNOWN_NOT_DISTANCES: {fixed}"
 
 
+def test_op_known_value_jumps_is_current():
+    fixed = sorted(c for c in OP_KNOWN_VALUE_JUMPS if not _op_audit(c).jumps)
+    assert not fixed, f"No longer jump in value; delete from OP_KNOWN_VALUE_JUMPS: {fixed}"
+
+
 def test_op_known_nonfinite_is_current():
     fixed = sorted(
         c
@@ -1156,6 +1258,7 @@ def test_op_tables_name_real_cases():
         OP_KNOWN_OVER_REPORTING,
         OP_KNOWN_UNDER_REPORTING,
         OP_KNOWN_NOT_DISTANCES,
+        OP_KNOWN_VALUE_JUMPS,
         OP_KNOWN_NONFINITE,
     )
     unknown = sorted({c for t in tables for c in t} - set(OP_CASES))
