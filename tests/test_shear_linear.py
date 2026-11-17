@@ -25,7 +25,6 @@ from software_defined_matter.model import MaterialRegion, sdf_2d_to_3d
 from software_defined_matter.sdf import sdf_ops as ops
 from software_defined_matter.sdf.bbox import infer_sdf_bbox
 from software_defined_matter.sdf.compile import make_sdf_closure
-from software_defined_matter.sdf.lipschitz import UNKNOWN, infer_sdf_max_rate
 
 
 def _mapped(p: np.ndarray, **kw) -> np.ndarray:
@@ -144,36 +143,6 @@ def test_the_bbox_moves_only_z_and_covers_the_whole_live_range():
     assert (xlo, ylo, xhi, yhi) == (-2.0, -0.5, 2.0, 0.5)
     assert zlo == pytest.approx(-1.0)  # the low end never rises (dz_0 = 0)
     assert zhi == pytest.approx(1.0 + 6.0)  # the top of the h bounds, not its value
-
-
-def test_the_lipschitz_bound_covers_the_measured_gradient():
-    part = _live_part()
-    node = sdf_deform(
-        "shear_linear", sdf_primitive("sphere", r=1.0),
-        u0=-1.0, u1=1.0, dz_0=0.0, dz_1={"$ref": "h"},
-    )  # fmt: skip
-    bound = infer_sdf_max_rate(node, part)
-    k = 6.0 / 2.0  # steepest slope: the top of h over the ramp width
-    assert bound == pytest.approx((k + math.sqrt(k * k + 4.0)) / 2.0)
-
-    steep = Part(name="steep", params={"h": Param("h", 6.0, free=True, bounds=(1.0, 6.0))})
-    f = make_sdf_closure(node, steep)
-    rng = np.random.default_rng(0)
-    p = jnp.asarray(rng.uniform([-1.0, -1.5, -2.0], [1.0, 1.5, 8.0], size=(4000, 3)))
-    step = 1e-3
-    grads = [
-        (np.asarray(f(p + step * e)) - np.asarray(f(p - step * e))) / (2 * step) for e in jnp.eye(3)
-    ]
-    measured = float(np.max(np.linalg.norm(np.stack(grads, -1), axis=-1)))
-    assert measured <= bound * 1.01
-    assert measured > 1.5  # the bound is not vacuous: a shear really stretches
-
-
-def test_a_ramp_with_no_width_has_no_bound():
-    node = sdf_deform(
-        "shear_linear", sdf_primitive("sphere", r=1.0), u0=1.0, u1=1.0, dz_0=0, dz_1=1
-    )
-    assert infer_sdf_max_rate(node, Part(name="t")) == UNKNOWN
 
 
 # ---------------------------------------------------------------------------

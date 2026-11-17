@@ -23,30 +23,34 @@ under ``type=op`` and ``canonical_sector_fold`` under ``type=transform``).
 
 from __future__ import annotations
 
-# Enable JAX float64 for this test module. sdm-core's conftest doesn't
-# enable x64 globally (it defaults to float32 like JAX itself); the
-# bubbles migration runs everything in float64 (see migration plan
-# §6.3) so SDF math has sub-mm precision. The 1e-10 tolerance the
-# softmin-chunked equivalence test asserts requires float64; under
-# float32 the same algebra produces ~1e-8 noise.
-from jax import config as _jax_config
+import jax
+import jax.numpy as jnp
+import numpy as np
+import pytest
 
-_jax_config.update("jax_enable_x64", True)
-
-# E402: these must import after the jax_enable_x64 config above -- moving them
-# to the top would make x64 mode take effect too late for this module's math.
-import jax.numpy as jnp  # noqa: E402
-import numpy as np  # noqa: E402
-import pytest  # noqa: E402
-
-from software_defined_matter.sdf.sdf_ops import (  # noqa: E402
+from software_defined_matter.sdf.sdf_ops import (
     op_smooth_union,
     op_softmin_chunked,
     op_softmin_many,
 )
-from software_defined_matter.sdf.transforms import (  # noqa: E402
+from software_defined_matter.sdf.transforms import (
     tf_canonical_sector_fold,
 )
+
+
+@pytest.fixture(autouse=True)
+def _float64():
+    """Run each test here in float64.
+
+    The 1e-10 tolerance the softmin-chunked equivalence test asserts needs it;
+    under float32 the same algebra produces ~1e-8 noise. Scoped to each test
+    rather than set globally at import: a global flag leaks into every module
+    that later shares the worker process, and the distance audit's NaN checks
+    on round-number grids give different answers in float64.
+    """
+    with jax.enable_x64(True):
+        yield
+
 
 # ────────────────────────────────────────────────────────────────────────
 # op_softmin_many: basic math
