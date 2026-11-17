@@ -191,6 +191,17 @@ def test_square_is_a_multiply_not_a_pow():
     np.testing.assert_allclose(_check(node), PARAMS["b"] ** 2, rtol=1e-9)
 
 
+def test_negating_a_negative_literal_is_not_a_decrement():
+    """`neg` of a negative number must not emit `--1.75`. GLSL reads `--` as
+    the decrement operator and the shader fails to compile, while Python
+    (which runs the parity checks) reads it as a double negation and passes.
+    A negated negative angle in a rotation is where real parts hit it."""
+    node = {"type": "unop", "op": "neg", "child": _n(-1.75)}
+    src = _glsl(node)
+    assert "--" not in src
+    np.testing.assert_allclose(_check(node), 1.75, rtol=1e-9)
+
+
 # ---------------------------------------------------------------------------
 # Refusals
 # ---------------------------------------------------------------------------
