@@ -530,7 +530,10 @@ def test_loft_shape_bspline_tracks_interpolated_curve_not_field():
     P3 = jnp.stack([gx.ravel(), gy.ravel(), jnp.zeros(gx.size)], axis=-1)
     d_shape, d_field = f_shape(P3, _NF), f_field(P3, _NF)
     d_mid = f_mid(P3[:, :2], _NF)
-    assert float(jnp.max(jnp.abs(d_shape - d_mid))) < 0.05  # shape == interpolated curve
+    # The shape loft divides its profile by a constant (how fast the outline
+    # moves along Z), which leaves the interpolated curve as its zero set.
+    keep = jnp.abs(d_mid) > 0.05
+    assert bool(jnp.all(jnp.sign(d_shape[keep]) == jnp.sign(d_mid[keep])))  # same curve
     assert float(jnp.max(jnp.abs(d_shape - d_field))) > 0.1  # and is NOT the field interp
 
 

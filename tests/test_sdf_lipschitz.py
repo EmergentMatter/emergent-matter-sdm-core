@@ -24,6 +24,7 @@ from software_defined_matter import (
     Param,
     Part,
     make_param_ref,
+    sdf_deform,
     sdf_op,
     sdf_primitive,
     sdf_raster_field,
@@ -31,6 +32,7 @@ from software_defined_matter import (
 )
 from software_defined_matter.sdf.compile import make_sdf_closure
 from software_defined_matter.sdf.lipschitz import UNKNOWN, infer_sdf_max_rate
+from software_defined_matter.sdf.sdf_ops import op_twist, shear_linear_scale
 
 SEED = 0
 N_SAMPLES = 30_000
@@ -162,7 +164,8 @@ def test_bend_bound_covers_the_measured_rate(k):
 
 @pytest.mark.parametrize("amplitude,freq", [(0.2, 0.1), (0.5, 0.3), (1.0, 0.5)])
 def test_displace_bound_covers_the_measured_rate(amplitude, freq):
-    """``sdf(p) + field(p)``: the gradients add, so the bounds add."""
+    """``(sdf(p) + field(p)) / (1 + L)``: the op divides out the field's slope
+    bound, so the sum is unit rate whatever the field's amplitude."""
     tree = {
         "type": "deform",
         "deform": "displace",
@@ -174,8 +177,7 @@ def test_displace_bound_covers_the_measured_rate(amplitude, freq):
         },
     }
     inferred, _measured = _assert_bounds(tree, 9.0)
-    expected = 1.0 + amplitude * 2.0 * math.pi * math.sqrt(3.0) * freq
-    assert inferred == pytest.approx(expected, rel=1e-9)
+    assert inferred == pytest.approx(1.0, rel=1e-9)
 
 
 def test_twist_bound_grows_with_the_domain():
@@ -274,17 +276,16 @@ def test_a_helix_reports_unknown():
     assert infer_sdf_max_rate(helix, _part(helix)) == UNKNOWN
 
 
-def test_a_pyramid_reports_unknown():
-    """The pyramid's value jumps across its own base plane (#30), so no finite
-    rate holds on a domain that contains the base, and a unit rate would be a
-    guess."""
+def test_a_pyramid_reports_a_unit_rate():
+    """The pyramid measures to its base square as well as its slanted faces, so
+    its value no longer jumps across the base plane (#30) and a unit rate holds."""
     pyramid = sdf_primitive("pyramid", h=1.5)
     closure = make_sdf_closure(pyramid, _part(pyramid))
     free = jnp.asarray(_part(pyramid).param_vector())
     pts = jnp.asarray([[0.0, -1e-4, 0.0], [0.0, 1e-4, 0.0]], dtype=jnp.float32)
     values = np.asarray(closure(pts, free))
-    assert abs(values[1] - values[0]) / 2e-4 > 10.0, "the base jump this test documents is gone"
-    assert infer_sdf_max_rate(pyramid, _part(pyramid)) == UNKNOWN
+    assert abs(values[1] - values[0]) / 2e-4 <= 1.02
+    _assert_bounds(pyramid, 2.5, expect=1.0)
 
 
 def test_a_raster_reports_unknown_whatever_its_samples():
@@ -300,3 +301,213 @@ def test_a_raster_reports_unknown_whatever_its_samples():
 def test_a_tree_holding_a_primitive_without_a_unit_rate_reports_unknown():
     tree = sdf_op("union", [sdf_primitive("sphere", r=2.0), sdf_primitive("helix", **HELIX)])
     assert infer_sdf_max_rate(tree, _part(tree)) == UNKNOWN
+
+
+# ---------------------------------------------------------------------------
+# Hermite twists: bounds hold inside and outside the ramp, over live params,
+# and through the query domains that translation and nesting hand down
+# ---------------------------------------------------------------------------
+
+
+def _deform_tree(name, params, child=None):
+    return {
+        "type": "deform",
+        "deform": name,
+        "params": params,
+        "child": sdf_primitive("box", b=[0.7, 1.2, 0.4]) if child is None else child,
+    }
+
+
+def _gradient_norms(tree, part, points):
+    """|grad sdf| at each of ``points``, by autodiff."""
+    closure = make_sdf_closure(tree, part)
+    grad = jax.vmap(jax.grad(lambda p: jnp.reshape(closure(p[None, :]), ())))
+    return np.linalg.norm(np.asarray(grad(jnp.asarray(points))), axis=1)
+
+
+def test_axial_shear_exceeds_the_old_square_root_bound():
+    point = jnp.array([1.0, 0, 0])
+    jac = np.asarray(jax.jacfwd(lambda p: op_twist(lambda q: q, p, 1.0))(point))
+    normal = np.linalg.svd(jac)[0][:, 0]
+    tree = _deform_tree("twist", {"k": 1.0}, sdf_primitive("plane", n=normal.tolist(), h=0.0))
+    part = _part(tree)
+    measured = _gradient_norms(tree, part, point[None, :])[0]
+    assert measured > math.sqrt(2) + 0.1
+    bound = infer_sdf_max_rate(tree, part, domain=((1.0, 0, 0), (1.0, 0, 0)))
+    assert measured <= bound
+
+
+@pytest.mark.parametrize("name", ["twist_radial", "twist_linear"])
+@pytest.mark.parametrize("angle", [-2 * math.pi, 0.0, 2 * math.pi])
+def test_hermite_twists_bound_gradients_inside_and_outside_the_ramp(name, angle):
+    radial = name == "twist_radial"
+    params = (
+        {"r0": 0.5, "r1": 2.0, "angle_inner": -0.3, "angle_outer": angle}
+        if radial
+        else {"u0": -0.5, "u1": 2.0, "angle_0": -0.3, "angle_1": angle, "axis": [2.0, 1.0]}
+    )
+    tree = _deform_tree(name, params)
+    part = _part(tree)
+    points = np.random.default_rng(208).uniform(-3, 3, (500, 3))
+    points = np.concatenate([points, [[r, 0, 0.2] for r in [0.4999, 0.5001, 1.25, 1.9999, 2.0001]]])
+    bound = infer_sdf_max_rate(tree, part, domain=((-3.0, -3.0, -3.0), (3.0, 3.0, 3.0)))
+    assert math.isfinite(bound)
+    measured = _gradient_norms(tree, part, points)
+    assert np.isfinite(measured).all()
+    assert np.max(measured) <= bound + 2e-5  # Float32 gradient roundoff.
+
+
+def test_bounds_cover_live_endpoint_angles_and_ramp_widths():
+    tree = _deform_tree(
+        "twist_radial",
+        {
+            "r0": 0.0,
+            "r1": make_param_ref("width"),
+            "angle_inner": 0.0,
+            "angle_outer": make_param_ref("angle"),
+        },
+    )
+    part = _part(
+        tree,
+        [
+            Param("width", 2.0, bounds=(1.0, 3.0), free=True),
+            Param("angle", 0.1, bounds=(-6.0, 6.0), free=True),
+        ],
+    )
+    domain = ((-3.0, -3.0, -1.0), (3.0, 3.0, 1.0))
+    bounds = infer_sdf_max_rate(tree, part, domain=domain)
+    assert bounds > infer_sdf_max_rate(tree, part, domain=domain, mode="values")
+    for width in [1.0, 2.0, 3.0]:
+        for angle in [-6.0, 0.0, 6.0]:
+            concrete = _deform_tree(
+                "twist_radial", {"r0": 0.0, "r1": width, "angle_inner": 0.0, "angle_outer": angle}
+            )
+            assert infer_sdf_max_rate(concrete, _part(concrete), domain=domain) <= bounds
+
+
+@pytest.mark.parametrize("width", [0.0, -1.0])
+def test_unproved_ramp_width_disables_skipping(width):
+    tree = _deform_tree(
+        "twist_radial", {"r0": 0.0, "r1": width, "angle_inner": 0.0, "angle_outer": 1.0}
+    )
+    assert infer_sdf_max_rate(tree, _part(tree), domain=((-2.0,) * 3, (2.0,) * 3)) == UNKNOWN
+
+
+def test_missing_domain_and_zero_linear_axis_disable_skipping():
+    tree = _deform_tree(
+        "twist_linear", {"u0": 0.0, "u1": 1.0, "angle_0": 0.0, "angle_1": 1.0, "axis": [0.0, 0.0]}
+    )
+    assert infer_sdf_max_rate(tree, _part(tree)) == UNKNOWN
+    assert infer_sdf_max_rate(tree, _part(tree), domain=((-2.0,) * 3, (2.0,) * 3)) == UNKNOWN
+
+
+def test_translated_and_nested_twists_use_child_query_domains():
+    inner = _deform_tree("twist", {"k": 2.0})
+    nested = _deform_tree(
+        "twist_radial", {"r0": 0.5, "r1": 2.0, "angle_inner": 0.0, "angle_outer": 2.0}, inner
+    )
+    tree = sdf_transform("translate", nested, t=[-10.0, 0, 0])
+    part = _part(tree)
+    points = np.random.default_rng(208).uniform(-1, 1, (500, 3))
+    bound = infer_sdf_max_rate(tree, part, domain=((-1.0,) * 3, (1.0,) * 3))
+    assert math.isfinite(bound)
+    assert max(_gradient_norms(tree, part, points)) <= bound
+
+
+def test_translation_does_not_hide_large_local_shear():
+    local = jnp.array([10.0, 0, 0])
+    jac = np.asarray(jax.jacfwd(lambda p: op_twist(lambda q: q, p, 1.0))(local))
+    normal = np.linalg.svd(jac)[0][:, 0]
+    tree = sdf_transform(
+        "translate",
+        _deform_tree("twist", {"k": 1.0}, sdf_primitive("plane", n=normal.tolist(), h=0.0)),
+        t=[-10.0, 0, 0],
+    )
+    part = _part(tree)
+    measured = _gradient_norms(tree, part, [[0.0, 0, 0]])[0]
+    assert measured > 10
+    assert infer_sdf_max_rate(tree, part, domain=((0.0,) * 3, (0.0,) * 3)) >= measured
+
+
+def test_unhandled_transform_cannot_reuse_the_parent_sampling_box():
+    tree = sdf_transform("rotate_z", _deform_tree("twist", {"k": 1.0}), angle=1.0)
+    assert infer_sdf_max_rate(tree, _part(tree), domain=((-1.0,) * 3, (1.0,) * 3)) == UNKNOWN
+
+
+@pytest.mark.parametrize("domain", [((1.0,) * 3, (-1.0,) * 3), ((0.0,) * 3, (math.inf, 1.0, 1.0))])
+def test_invalid_sampling_domains_are_rejected(domain):
+    tree = _deform_tree("twist", {"k": 1.0})
+    with pytest.raises(ValueError, match="finite ordered 3-D box"):
+        infer_sdf_max_rate(tree, _part(tree), domain=domain)
+
+
+# ---------------------------------------------------------------------------
+# Axis warps: shear_linear, scale_axis, taper_linear
+# ---------------------------------------------------------------------------
+
+
+def test_shear_linear_bound_covers_the_measured_gradient():
+    part = Part(name="live", params={"h": Param("h", 3.0, free=True, bounds=(1.0, 6.0))})
+    node = sdf_deform(
+        "shear_linear", sdf_primitive("sphere", r=1.0),
+        u0=-1.0, u1=1.0, dz_0=0.0, dz_1={"$ref": "h"},
+    )  # fmt: skip
+    # The op divides by the stretch at its actual slope, so the child's rate
+    # carries through for every h in its bounds.
+    assert infer_sdf_max_rate(node, part) == pytest.approx(1.0)
+    bound = 1.0
+
+    steep = Part(name="steep", params={"h": Param("h", 6.0, free=True, bounds=(1.0, 6.0))})
+    f = make_sdf_closure(node, steep)
+    rng = np.random.default_rng(0)
+    p = jnp.asarray(rng.uniform([-1.0, -1.5, -2.0], [1.0, 1.5, 8.0], size=(4000, 3)))
+    step = 1e-3
+    grads = [
+        (np.asarray(f(p + step * e)) - np.asarray(f(p - step * e))) / (2 * step) for e in jnp.eye(3)
+    ]
+    measured = float(np.max(np.linalg.norm(np.stack(grads, -1), axis=-1)))
+    assert measured <= bound * 1.01
+    # Without the divisor this shear climbs at (k + sqrt(k^2 + 4)) / 2 = 3.30.
+    k = 6.0 / 2.0
+    assert float(shear_linear_scale(-1.0, 1.0, 0.0, 6.0)) == pytest.approx(
+        2.0 / (k + math.sqrt(k * k + 4.0)), rel=1e-6
+    )
+
+
+def test_shear_linear_ramp_with_no_width_has_no_bound():
+    node = sdf_deform(
+        "shear_linear", sdf_primitive("sphere", r=1.0), u0=1.0, u1=1.0, dz_0=0, dz_1=1
+    )
+    assert infer_sdf_max_rate(node, Part(name="t")) == UNKNOWN
+
+
+def test_scale_axis_keeps_the_child_rate_across_a_live_factor():
+    part = Part(name="live", params={"sx": Param("sx", 2.0, free=True, bounds=(1.0, 3.0))})
+    node = sdf_transform("scale_axis", sdf_primitive("sphere", r=1.0), s=[{"$ref": "sx"}, 1.0, 1.0])
+    assert infer_sdf_max_rate(node, part) == pytest.approx(1.0)  # min(s)/s_i <= 1
+
+
+def test_scale_axis_factor_that_can_reach_zero_has_no_bound():
+    part = Part(name="t", params={"sx": Param("sx", 1.0, free=True, bounds=(0.0, 2.0))})
+    node = sdf_transform("scale_axis", sdf_primitive("sphere", r=1.0), s=[{"$ref": "sx"}, 1.0, 1.0])
+    assert infer_sdf_max_rate(node, part) == UNKNOWN
+
+
+def test_taper_rate_needs_a_domain_and_then_covers_the_measured_gradient():
+    part = Part(name="t")
+    node = sdf_deform(
+        "taper_linear", sdf_primitive("capped_cylinder", h=1.0, r=1.0),
+        z0=-1.0, z1=1.0, s_0=1.0, s_1=0.5,
+    )  # fmt: skip
+    assert infer_sdf_max_rate(node, part) == UNKNOWN
+    domain = ((-1.5, -1.5, -1.5), (1.5, 1.5, 1.5))
+    bound = infer_sdf_max_rate(node, part, domain=domain)
+    assert math.isfinite(bound)
+    f = make_sdf_closure(node, part)
+    rng = np.random.default_rng(2)
+    p = jnp.asarray(rng.uniform(-1.4, 1.4, size=(4000, 3)))
+    step = 1e-3
+    grads = [
+        (np.asarray(f(p + step * e)) - np.asarray(f(p - step * e))) / (2 * step) for e in jnp.eye(3)
+    ]
+    assert float(np.max(np.linalg.norm(np.stack(grads, -1), axis=-1))) <= bound * 1.01

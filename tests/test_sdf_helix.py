@@ -17,8 +17,11 @@ The bar, in order of how much each would hurt to get wrong:
 3. **Clocking**: ``phase`` must be exactly a rotation about Z. Threads mate by
    registering two helices that share a pitch and differ in phase, so this
    property is load-bearing for the whole superprim story.
-4. Lipschitz bound |grad| <= 1, finite gradients on the axis, flat end caps,
-   handedness, analytic bbox tightness, and .sdm round-trip.
+4. Flat end caps, handedness, analytic bbox tightness, and .sdm round-trip.
+
+Rate, projection and finiteness (including on the Z axis) are audited with
+every other primitive in ``tests/test_sdf_is_distance.py``, at this file's
+thread-like parameters among others.
 """
 
 from __future__ import annotations
@@ -254,26 +257,6 @@ def test_helix_handedness_mirrors_in_z():
 # ---------------------------------------------------------------------------
 
 
-def test_helix_is_lipschitz_bounded():
-    """|grad| <= 1 is what makes the field safe to ray-march."""
-    R, pitch, r, n = 10.0, 6.0, 1.2, 3.0
-    f, _ = _closure(sdf_helix(R, pitch, r, n))
-    rng = np.random.default_rng(3)
-    pts = rng.uniform(-14.0, 14.0, (500, 3))
-    h = 1e-3
-    g = []
-    for axis in range(3):
-        off = np.zeros(3)
-        off[axis] = h
-        d_plus = np.asarray(f(jnp.asarray(pts + off), _NF))
-        d_minus = np.asarray(f(jnp.asarray(pts - off), _NF))
-        g.append((d_plus - d_minus) / (2 * h))
-    mag = np.linalg.norm(np.stack(g, axis=-1), axis=-1)
-    # Slack for the C0 crease midway between turns, where a central difference
-    # straddles two branches of the nearest-turn min.
-    assert np.percentile(mag, 99.0) <= 1.02, float(np.percentile(mag, 99.0))
-
-
 def test_helix_has_flat_end_caps():
     R, pitch, r, n = 8.0, 5.0, 1.0, 2.0
     half_h = 0.5 * n * pitch
@@ -283,12 +266,6 @@ def test_helix_has_flat_end_caps():
     for a in (0.0, 1.0, np.pi, -2.0):
         p = jnp.asarray([[R * np.cos(a), R * np.sin(a), half_h + 2.0]])
         assert float(f(p, _NF)[0]) == pytest.approx(2.0, abs=0.05)
-
-
-def test_helix_gradient_finite_on_axis():
-    """The azimuth JVP guard must keep grads finite on the Z axis."""
-    g = jax.grad(lambda p: helix(p, 10.0, 6.0, 1.2, 3.0))(jnp.zeros(3))
-    assert bool(jnp.all(jnp.isfinite(g))), g
 
 
 def test_helix_gradient_flows_to_params():
