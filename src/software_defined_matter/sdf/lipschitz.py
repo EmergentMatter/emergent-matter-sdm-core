@@ -4,11 +4,8 @@ An SDF is supposed to return the distance to the nearest surface, which means
 moving one millimetre can change the value by at most one millimetre. The
 primitives satisfy that (``tests/test_sdf_is_distance.py`` measures their
 gradients), apart from the few declared in ``_PRIMITIVES_WITHOUT_UNIT_RATE``,
-which return :data:`UNKNOWN`. One exception is not in that table, because its
-rate depends on a parameter: ``plane`` changes by ``|n|`` per unit of travel
-when its normal is not a unit vector (#31), and is still reported as 1.0. A
-whole *tree* need not satisfy the bound either: some operations stretch space,
-and the value stretches with it.
+which return :data:`UNKNOWN`. A whole *tree* need not satisfy the bound
+either: some operations stretch space, and the value stretches with it.
 
     union(sphere, box)               1.0    both children are distances
     translate(sphere, t=[5,0,0])     1.0    moving a shape changes nothing
@@ -76,7 +73,6 @@ _PRIMITIVE_RATE = 1.0
 #: exempts cannot report a unit rate, and an entry no longer needed fails there.
 _PRIMITIVES_WITHOUT_UNIT_RATE: dict[str, str] = {
     "helix": "its value jumps across its own axis, so no finite rate holds there",
-    "pyramid": "its value jumps across its own base plane, so no finite rate holds there",
     "raster_field": "a sampled field's rate follows its samples, not a universal unit",
 }
 
@@ -146,8 +142,10 @@ def _node_rate(node: Any, intervals: dict[str, Interval], domain: BBox | None) -
 
     if node_type == "modifier":
         # `round` subtracts a constant, `onion` takes abs() and subtracts one.
-        # Neither changes how fast the value moves.
-        return _node_rate(node["child"], intervals, domain)
+        # Neither changes how fast the value moves. `elongate` adds a unit-rate
+        # term inside its core, where the child's value is constant.
+        child = _node_rate(node["child"], intervals, domain)
+        return max(child, 1.0) if node.get("modifier") == "elongate" else child
 
     if node_type == "2d_to_3d":
         # revolution maps p -> (|p.xy|, p.z) and extrusion combines the profile
@@ -162,9 +160,15 @@ def _node_rate(node: Any, intervals: dict[str, Interval], domain: BBox | None) -
         # vectors, so the frame itself contributes no stretch.
         return _node_rate(node["child"], intervals, domain)
 
-    # `loft` interpolates two 2-D fields along Z; the interpolation introduces
-    # a Z-derivative that depends on how different the sections are, and no
-    # bound has been worked out.
+    if node_type == "loft":
+        # interp='shape' takes the exact polygon distance of an interpolated
+        # outline and divides out how fast that outline moves along Z
+        # (sdf_ops.loft_shape), so it is unit rate whatever its sections.
+        # interp='field' interpolates arbitrary 2-D fields, and nothing bounds
+        # how fast two of them differ.
+        interp = (node.get("params") or {}).get("interp", "field")
+        return 1.0 if interp == "shape" else UNKNOWN
+
     return UNKNOWN
 
 
@@ -286,7 +290,9 @@ def _deform_rate(
         child = _node_rate(node["child"], intervals, tapered_domain)
         if not math.isfinite(child):
             return UNKNOWN
-        bound = child * (max(1.0, 1.0 / s_min) + rho * slope / (s_min * s_min))
+        # The op multiplies by min(s0, s1, 1) <= s, which cancels the 1/s
+        # diagonal and leaves the outer-product term at most rho * |s'| / s.
+        bound = child * (1.0 + rho * slope / s_min)
         return bound if math.isfinite(bound) else UNKNOWN
 
     if name == "shear_linear":
@@ -312,19 +318,21 @@ def _deform_rate(
         child = _node_rate(node["child"], intervals, sheared_domain)
         if not math.isfinite(slope) or not math.isfinite(child):
             return UNKNOWN
-        bound = child * (slope + math.sqrt(slope * slope + 4.0)) / 2.0
-        return bound if math.isfinite(bound) else UNKNOWN
+        # The op divides by the stretch at its actual slope
+        # (sdf_ops.shear_linear_scale), so the child's rate carries through.
+        return child
 
     child = _node_rate(node["child"], intervals, domain)
     if name == "displace":
-        # `sdf(p) + field(p)`: the two gradients add, so their bounds add.
+        # `(sdf(p) + field(p)) / (1 + L)`, with L the field's slope bound at its
+        # actual params, so the rate is (child + L) / (1 + L) <= max(child, 1)
+        # for any L. A field with no finite bound is not divided.
         field = node.get("field")
         if field is None:
             return UNKNOWN
-        field_rate = _field_rate(field, intervals)
-        if field_rate == UNKNOWN:
+        if _field_rate(field, intervals) == UNKNOWN:
             return UNKNOWN
-        return child + field_rate
+        return max(child, 1.0)
 
     return UNKNOWN
 

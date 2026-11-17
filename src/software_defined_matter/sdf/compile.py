@@ -36,6 +36,7 @@ from software_defined_matter.dsl.resolve import (
 from software_defined_matter.sdf import sdf_ops as ops
 from software_defined_matter.sdf import sdf_shapes as shapes
 from software_defined_matter.sdf import transforms
+from software_defined_matter.sdf._helpers import _length
 
 if TYPE_CHECKING:
     from software_defined_matter.model import Part, SDFTree
@@ -739,12 +740,14 @@ def _compile_deform(
         if "field" not in node:
             raise ValueError("deform 'displace' requires a 'field' subtree on the node")
         field_fn = _compile_field_node(node["field"], binding)
+        rate_fn = _compile_field_rate(node["field"], binding)
 
         def fn(p: jnp.ndarray, free_vec: jnp.ndarray) -> jnp.ndarray:
             return ops.op_displace(
                 lambda q: child(q, free_vec),
                 lambda q: field_fn(q, free_vec),
                 p,
+                0.0 if rate_fn is None else rate_fn(free_vec),
             )
 
         return fn
@@ -929,6 +932,50 @@ def _compile_sweep(
 # ``(points, free_vec) -> scalar`` closure. They are NOT SDFs (the scalar
 # value is a displacement amplitude, not a distance) and live in their own
 # dispatch tables.
+
+
+def _compile_field_rate(
+    node: Any, binding: ParamBinding
+) -> Callable[[jnp.ndarray], jnp.ndarray] | None:
+    """Bound on ``|grad field|`` from the field's resolved params, or ``None``.
+
+    ``displace`` divides by ``1 + rate`` so it never over-reports. The bound is
+    taken at the params' actual values, which is what makes it exact for this
+    evaluation; ``sdf/lipschitz.py`` states the same bounds over intervals.
+    ``angular`` has none (its gradient grows as ``1/r`` toward the axis), and
+    neither does a sum containing it.
+    """
+    if node.get("type") == "field_op" and node.get("op") == "add":
+        rates = [_compile_field_rate(c, binding) for c in node.get("children", [])]
+        bounded = [r for r in rates if r is not None]
+        if not rates or len(bounded) != len(rates):
+            return None
+
+        def total(free_vec: jnp.ndarray) -> jnp.ndarray:
+            out = jnp.zeros(())
+            for r in bounded:
+                out = out + r(free_vec)
+            return out
+
+        return total
+    if node.get("type") != "field" or node.get("kind") not in ("sin_xyz", "radial"):
+        return None
+    kind = node["kind"]
+    raw_kwargs = _primitive_kwargs(node)
+
+    def rate(free_vec: jnp.ndarray) -> jnp.ndarray:
+        kw = resolve_param_kwargs(raw_kwargs, binding, free_vec)
+        amplitude = jnp.abs(jnp.asarray(kw.get("amplitude", 1.0)))
+        freq = jnp.asarray(kw["freq"])
+        if kind == "sin_xyz":
+            # Each partial of a product of sines is at most amplitude * 2 pi f_i.
+            # A scalar freq applies to all three axes.
+            norm = jnp.sqrt(3.0) * jnp.abs(freq) if freq.ndim == 0 else _length(freq)
+        else:
+            norm = jnp.abs(freq)  # |grad |p.xy|| is 1
+        return amplitude * 2.0 * jnp.pi * norm
+
+    return rate
 
 
 def _compile_field_node(node: Any, binding: ParamBinding) -> SDFClosure:

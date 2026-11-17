@@ -27,7 +27,7 @@ zero runtime cost under ``jit``.
 
 import jax.numpy as jnp
 
-from software_defined_matter.sdf._helpers import _check_axis_vector, _clamp, _length
+from software_defined_matter.sdf._helpers import _azimuth, _check_axis_vector, _clamp, _length
 
 # ===========================================================================
 # Spatial Transforms  (apply before calling an SDF)
@@ -114,7 +114,8 @@ def tf_canonical_sector_fold(p, n_sectors, centered=False, phase_frac=0.0):
         The folded query points, same shape as ``p``.
     """
     sector_angle = 2.0 * jnp.pi / n_sectors
-    theta = jnp.arctan2(p[..., 1], p[..., 0])
+    # _azimuth, not arctan2: same value, but a finite gradient on the Z axis.
+    theta = _azimuth(p)
     if centered:
         theta_local = (
             jnp.mod(theta - phase_frac * sector_angle + 0.5 * sector_angle, sector_angle)
@@ -122,7 +123,7 @@ def tf_canonical_sector_fold(p, n_sectors, centered=False, phase_frac=0.0):
         )
     else:
         theta_local = jnp.mod(theta, sector_angle)
-    r = jnp.sqrt(p[..., 0] ** 2 + p[..., 1] ** 2)
+    r = _length(p[..., :2])
     px = r * jnp.cos(theta_local)
     py = r * jnp.sin(theta_local)
     return jnp.stack([px, py, p[..., 2]], axis=-1)

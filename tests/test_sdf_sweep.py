@@ -27,6 +27,7 @@ from software_defined_matter import (
     Part,
     io,
     make_param_ref,
+    sdf_modifier,
     sdf_primitive,
     sdf_sweep,
 )
@@ -113,6 +114,68 @@ def test_sweep_open_path_has_flat_caps():
 # ---------------------------------------------------------------------------
 
 
+def test_subdividing_a_straight_sweep_preserves_cap_depth_and_shell():
+    """A segment switch must not hide either end cap from an interior query."""
+    from software_defined_matter.sdf.sdf_shapes import capped_cylinder
+
+    profile = sdf_primitive("circle_2d", r=0.5)
+    path = [[x, 0.0, 0.0] for x in (0.0, 0.2, 1.8, 2.0)]
+    tree = sdf_sweep(profile, path, path_kind="polyline", closed=False)
+    f, _ = _jclosure(tree)
+    points = jnp.array(
+        [
+            [x, y, 0.0]
+            for x in (-0.1, 0.0, 0.19999, 0.20001, 1.79999, 1.80001, 2.0, 2.1)
+            for y in (0.0, 0.3, 0.6)
+        ]
+    )
+    expected = capped_cylinder(
+        jnp.stack([points[:, 1], points[:, 2], points[:, 0] - 1.0], -1), 1.0, 0.5
+    )
+    actual = f(points, _NF)
+    # Float32 frame and cylinder arithmetic differ by a few ulps.
+    np.testing.assert_allclose(actual, expected, atol=2e-6, rtol=0.0)
+    shell, _ = _jclosure(sdf_modifier("onion", tree, thickness=0.25))
+    np.testing.assert_allclose(shell(points, _NF), jnp.abs(expected) - 0.25, atol=2e-6, rtol=0.0)
+    grads = jax.vmap(jax.grad(lambda p: f(p[None, :], _NF)[0]))(points)
+    assert bool(jnp.all(jnp.isfinite(grads)))
+
+
+def test_sweep_caps_remain_continuous_without_cutting_bent_legs():
+    profile = sdf_primitive("circle_2d", r=0.5)
+    path = [[0.0, 0.0, 0.0], [0.2, 0.0, 0.0], [0.2, 2.0, 0.0], [-1.0, 2.0, 0.0]]
+    f, _ = _jclosure(sdf_sweep(profile, path, path_kind="polyline", closed=False))
+    pts = jnp.array(
+        [
+            [0.1, 0.09999, 0.0],
+            [0.1, 0.10001, 0.0],
+            [0.0, 0.4, 0.0],
+            [0.0, 2.0, 0.0],
+            [0.0, -0.4, 0.0],
+        ]
+    )
+    values = np.asarray(f(pts, _NF))
+    # A short first segment must not leave a jump across the bend's bisector.
+    assert abs(values[1] - values[0]) <= 2e-5 + 2e-6  # separation plus float32 error
+    assert values[2] < 0.0  # covered part of the start cap is not a surface
+    assert values[3] == pytest.approx(-0.5, abs=2e-6)  # cap plane crosses a distant leg
+    assert values[4] == pytest.approx(0.0, abs=2e-6)  # exposed cap face
+
+
+def test_sweep_cap_depth_has_finite_parameter_gradients():
+    from software_defined_matter.sdf import sdf_ops, sdf_shapes
+
+    def depth(r, length):
+        path = jnp.array([[0.0, 0.0, 0.0], [0.2, 0.0, 0.0], [length, 0.0, 0.0]])
+        return sdf_ops.sweep(
+            lambda uv: sdf_shapes.circle_2d(uv, r), path, jnp.array([1.8, 0.0, 0.0])
+        )
+
+    grad_r, grad_length = jax.jit(jax.grad(depth, argnums=(0, 1)))(0.5, 2.0)
+    assert float(grad_r) == pytest.approx(0.0, abs=2e-6)
+    assert float(grad_length) == pytest.approx(-1.0, abs=2e-6)
+
+
 def test_sweep_polygon_profile_inside_outside():
     bar = sdf_sweep(
         sdf_primitive("box_2d", b=[1.0, 1.0]),
@@ -148,7 +211,10 @@ def test_sweep_open_bezier_path_compiles():
         closed=False,
     )
     f, _ = _jclosure(helix)
-    assert float(f(jnp.array([[0.0, 0, 0]]), _NF)[0]) < 0.0  # at the first anchor, on axis
+    # On the axis just past the first anchor: inside. The anchor itself lies on
+    # the start cap's plane, so it reads exactly 0.
+    assert float(f(jnp.array([[0.0, 0, 0]]), _NF)[0]) == pytest.approx(0.0, abs=1e-6)
+    assert float(f(jnp.array([[0.3, 0, 0.2]]), _NF)[0]) < 0.0
     assert jnp.all(jnp.isfinite(f(jnp.array([[4.5, 0, 2.0], [9.0, 0, 4]]), _NF)))
 
 

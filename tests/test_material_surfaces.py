@@ -218,7 +218,7 @@ def test_snapshot_and_polygon_extrusion_rate_contract():
     _hit(surface.prepare([0]).trace([-3, 0, 0], [1, 0, 0], 0, 6), 2)
 
 
-def test_scaled_plane_normals_are_not_assumed_to_have_unit_rate():
+def test_scaled_plane_normals_still_give_a_unit_rate():
     from software_defined_matter import sdf_op
 
     part = _bodies()
@@ -230,9 +230,10 @@ def test_scaled_plane_normals_are_not_assumed_to_have_unit_rate():
         ],
     )
     pose = compile_material_surfaces(part, domain=DOMAIN).prepare([0])
-    assert pose.max_rate >= 200
+    # plane divides by |n| (#31), so a normal of length 100 changes nothing.
     gradient = float((pose.field([0.1236, 0, 0]) - pose.field([0.1235, 0, 0])) / 0.0001)
-    assert gradient == pytest.approx(100, rel=1e-3)
+    assert gradient == pytest.approx(1.0, rel=1e-2)
+    assert pose.max_rate < 200
 
 
 def test_invariant_flexure_weld_is_proved_solid(surface_runtime):
