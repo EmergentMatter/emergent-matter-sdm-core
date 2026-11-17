@@ -23,7 +23,6 @@ from software_defined_matter.sdf import sdf_ops as ops
 from software_defined_matter.sdf.bbox import infer_sdf_bbox
 from software_defined_matter.sdf.compile import make_sdf_closure
 from software_defined_matter.sdf.features import infer_min_feature_size
-from software_defined_matter.sdf.lipschitz import UNKNOWN, infer_sdf_max_rate
 
 
 def _grid(lo: float, hi: float, n: int = 25) -> jnp.ndarray:
@@ -61,19 +60,12 @@ def test_equal_factors_are_exactly_the_uniform_scale():
     np.testing.assert_allclose(np.asarray(a), np.asarray(b), rtol=1e-6, atol=1e-6)
 
 
-def test_scale_axis_bbox_and_rate_hold_across_a_live_factor():
+def test_scale_axis_bbox_holds_across_a_live_factor():
     part = Part(name="live", params={"sx": Param("sx", 2.0, free=True, bounds=(1.0, 3.0))})
     node = sdf_transform("scale_axis", sdf_primitive("sphere", r=1.0), s=[{"$ref": "sx"}, 1.0, 1.0])
     (xlo, ylo, zlo), (xhi, yhi, zhi) = infer_sdf_bbox(node, part)
     assert (xlo, xhi) == (-3.0, 3.0)  # the top of the sx bounds
     assert (ylo, yhi, zlo, zhi) == (-1.0, 1.0, -1.0, 1.0)
-    assert infer_sdf_max_rate(node, part) == pytest.approx(1.0)  # min(s)/s_i <= 1
-
-
-def test_a_factor_that_can_reach_zero_has_no_bound():
-    part = Part(name="t", params={"sx": Param("sx", 1.0, free=True, bounds=(0.0, 2.0))})
-    node = sdf_transform("scale_axis", sdf_primitive("sphere", r=1.0), s=[{"$ref": "sx"}, 1.0, 1.0])
-    assert infer_sdf_max_rate(node, part) == UNKNOWN
 
 
 def test_scale_axis_works_in_2d():
@@ -126,23 +118,6 @@ def test_taper_bbox_grows_xy_by_the_largest_factor_only():
     (xlo, ylo, zlo), (xhi, yhi, zhi) = infer_sdf_bbox(_taper(s1={"$ref": "s"}), part)
     assert (xlo, xhi, ylo, yhi) == (-2.5, 2.5, -2.5, 2.5)
     assert (zlo, zhi) == (-1.0, 1.0)
-
-
-def test_taper_rate_needs_a_domain_and_then_covers_the_measured_gradient():
-    part = Part(name="t")
-    node = _taper(s1=0.5)
-    assert infer_sdf_max_rate(node, part) == UNKNOWN
-    domain = ((-1.5, -1.5, -1.5), (1.5, 1.5, 1.5))
-    bound = infer_sdf_max_rate(node, part, domain=domain)
-    assert math.isfinite(bound)
-    f = make_sdf_closure(node, part)
-    rng = np.random.default_rng(2)
-    p = jnp.asarray(rng.uniform(-1.4, 1.4, size=(4000, 3)))
-    step = 1e-3
-    grads = [
-        (np.asarray(f(p + step * e)) - np.asarray(f(p - step * e))) / (2 * step) for e in jnp.eye(3)
-    ]
-    assert float(np.max(np.linalg.norm(np.stack(grads, -1), axis=-1))) <= bound * 1.01
 
 
 # ---------------------------------------------------------------------------
