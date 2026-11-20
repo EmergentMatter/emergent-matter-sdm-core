@@ -22,6 +22,7 @@ from software_defined_matter import (
     sdf_primitive,
     validate,
 )
+from software_defined_matter.dsl.expr import expr_binop, expr_num, expr_param
 from software_defined_matter.dsl.resolve import make_binding
 from software_defined_matter.extensions import (
     ExtensionRegistrationError,
@@ -444,9 +445,19 @@ def test_csg_like_children_follow_the_rules_of_that_op():
     plane = sdf_primitive("plane", n=[0.0, 0.0, 1.0], h=0.0)
     sphere = sdf_primitive("sphere", r=1.0)
     node = _node(children=[sphere, plane], children_dim=3)
+    extensions.register_extension(_spec())
     with pytest.raises(UnboundedRootError):
         validate(_part(node))
-    extensions.register_extension(_spec(csg_like="subtract"))
+    extensions.unregister_extension(EXT)
+    extensions.register_extension(_spec(csg_like="intersect"))
+    validate(_part(node))
+
+
+def test_validity_of_cutter_children_does_not_depend_on_registration():
+    plane = sdf_primitive("plane", n=[0.0, 0.0, 1.0], h=0.0)
+    node = _node(children=[sdf_primitive("sphere", r=1.0), plane], children_dim=3)
+    validate(_part(node))  # unregistered: the fallback stands in, the children are not evaluated
+    extensions.register_extension(_spec(csg_like="intersect"))
     validate(_part(node))
 
 
@@ -491,6 +502,17 @@ def test_layered_binding_serves_its_names_and_delegates_the_rest():
     assert float(layered.get("b", free)) == 5.0
     assert layered.free_names == binding.free_names
     assert binding.nominal() == {"a": 2.0, "b": 5.0}
+
+
+def test_a_layered_name_reaches_derived_params():
+    double = expr_binop("*", expr_num(2.0), expr_param("t"))
+    part = _part(sdf_primitive("sphere", r=1.0), t=Param("t", 1.0), d=Param("d", 2.0, expr=double))
+    binding = make_binding(part)
+    free = binding.initial_free_vector()
+    layered = binding.layered(["t"], lambda name, v: jnp.asarray(10.0))
+    assert float(layered.get("t", free)) == 10.0
+    assert float(layered.get("d", free)) == 20.0
+    assert float(binding.get("d", free)) == 2.0
 
 
 def test_refresh_fallbacks_rebuilds_only_where_the_kind_can():

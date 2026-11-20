@@ -138,8 +138,10 @@ def _walk(node: Any, *, can_be_unbounded: bool, region_name: str) -> None:
                 region_name=region_name,
             )
         else:
+            # Without a spec the fallback stands in and the children are never
+            # evaluated, so they are held to the bounded rule only when registered.
             for c in children:
-                _walk(c, can_be_unbounded=False, region_name=region_name)
+                _walk(c, can_be_unbounded=spec is None, region_name=region_name)
         return
 
 

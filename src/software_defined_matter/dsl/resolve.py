@@ -177,7 +177,8 @@ class _LayeredBinding(ParamBinding):
     def get(self, name: str, free_vec: jnp.ndarray) -> jnp.ndarray:
         if name in self._extra:
             return self._getter(name, free_vec)
-        return self._inner.get(name, free_vec)
+        # Not the inner binding's get: a derived param must see the layered names too.
+        return ParamBinding.get(self, name, free_vec)
 
 
 def make_binding(part: Part) -> ParamBinding:
