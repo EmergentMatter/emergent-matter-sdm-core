@@ -262,11 +262,14 @@ class Port:
         extra = set(data) - {"name", "frame", "body", "domains", "sdf_tree", "metadata"}
         if extra:
             raise ValueError(f"Port: unknown fields {sorted(extra)}")
+        from software_defined_matter.extensions import promote_tree
+
+        tree = data.get("sdf_tree")
         return cls(
             name=data["name"],
             frame=Frame.from_dict(data["frame"]),
             body=data.get("body"),
             domains=data.get("domains", {}),
-            sdf_tree=data.get("sdf_tree"),
+            sdf_tree=None if tree is None else promote_tree(tree),
             metadata=data.get("metadata", {}),
         )

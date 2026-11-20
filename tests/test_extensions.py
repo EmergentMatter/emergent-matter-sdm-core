@@ -15,6 +15,7 @@ from software_defined_matter import (
     MaterialRegion,
     Param,
     Part,
+    Port,
     extensions,
     min_schema_version_for,
     sdf_extension,
@@ -541,6 +542,38 @@ def test_glsl_uses_the_fallback_even_when_the_kind_is_registered():
     extensions.register_extension(_spec())
     em = emit_glsl(_part(_node()))
     assert em.fallbacks == [EXT]
+
+
+# -- extensions in ports ----------------------------------------------------
+
+
+def _port_part(node):
+    region = MaterialRegion(material_id=1, name="m", sdf_tree=sdf_primitive("sphere", r=1.0))
+    return Part(name="p", materials=[region], ports=[Port("face", sdf_tree=node)])
+
+
+def test_an_extension_in_a_port_saves_a_file_that_loads(tmp_path):
+    part = _port_part(_node())
+    assert min_schema_version_for(part) == "0.7"
+    path = tmp_path / "p.sdm"
+    part.save(str(path))
+    loaded = Part.load(str(path))
+    assert loaded.ports[0].sdf_tree == part.ports[0].sdf_tree
+    (use,) = extensions.extension_uses(loaded)
+    assert use.path == "ports[0].sdf_tree"
+
+
+def test_port_trees_are_promoted_and_refreshed():
+    extensions.PROMOTIONS[EXT] = extensions.Promotion(1, _to_native)
+    loaded = Part.from_dict(_port_part(_node(half=4.0)).to_dict())
+    assert loaded.ports[0].sdf_tree == sdf_primitive("sphere", r=4.0)
+    extensions.PROMOTIONS.clear()
+    extensions.register_extension(
+        _spec(make_fallback=lambda node, part: sdf_primitive("sphere", r=7.0))
+    )
+    part = _port_part(_node())
+    assert extensions.refresh_fallbacks(part) == 1
+    assert part.ports[0].sdf_tree["fallback"] == sdf_primitive("sphere", r=7.0)
 
 
 # -- nodes that refuse an extension ---------------------------------------

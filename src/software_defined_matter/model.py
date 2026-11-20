@@ -986,6 +986,8 @@ def _capabilities_used(part: Part) -> set[str]:
 
     for region in part.materials:
         visit(region.sdf_tree)
+    for port in part.ports:
+        visit(port.sdf_tree)
     visit(part.kinematics)
     visit([p.expr for p in part.params.values()])
     visit([o.expr for o in part.objectives])

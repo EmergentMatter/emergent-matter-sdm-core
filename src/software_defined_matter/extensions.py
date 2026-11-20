@@ -400,16 +400,25 @@ def _walk_extensions(tree: Any, path: str) -> Iterator[tuple[str, dict[str, Any]
             yield from _walk_extensions(child, f"{path}.children[{i}]")
 
 
+def _part_trees(part: Part) -> Iterator[tuple[str, Any]]:
+    """Every SDF tree ``part`` holds, with its path: material regions, then ports."""
+    for i, region in enumerate(part.materials):
+        yield f"materials[{i}].sdf_tree", region.sdf_tree
+    for i, port in enumerate(part.ports):
+        if port.sdf_tree is not None:
+            yield f"ports[{i}].sdf_tree", port.sdf_tree
+
+
 def extension_uses(part: Part) -> list[ExtensionUse]:
-    """Every extension node in ``part``'s material regions, outermost first.
+    """Every extension node in ``part``'s material regions and ports, outermost first.
 
     For an unavailable node, ``frozen_params`` lists the free or derived
     parameters its payload refers to: the ones its fallback ignores.
     """
     out: list[ExtensionUse] = []
     live = {n for n, p in part.params.items() if p.free or p.expr is not None}
-    for i, region in enumerate(part.materials):
-        for path, node in _walk_extensions(region.sdf_tree, f"materials[{i}].sdf_tree"):
+    for root, tree in _part_trees(part):
+        for path, node in _walk_extensions(tree, root):
             spec = lookup(node)
             frozen = () if spec else tuple(sorted(lost_refs(node) & live))
             out.append(
@@ -445,8 +454,8 @@ def refresh_fallbacks(part: Part) -> int:
     fallback.
     """
     built: list[tuple[dict[str, Any], Any]] = []
-    for region in part.materials:
-        for _path, node in _walk_extensions(region.sdf_tree, ""):
+    for root, tree in _part_trees(part):
+        for _path, node in _walk_extensions(tree, root):
             spec = lookup(node)
             if spec is not None and spec.make_fallback is not None:
                 fallback = spec.make_fallback(node, part)
