@@ -280,7 +280,7 @@ def _compile_primitive(node: dict[str, Any], binding: ParamBinding) -> SDFClosur
     if kind not in _PRIMITIVES:
         raise ValueError(f"Unknown primitive {kind!r}")
     if kind == "raster_field":
-        return _compile_raster_field(node)
+        return compile_raster_field(node)
     prim_fn = _PRIMITIVES[kind]
     raw_kwargs = _primitive_kwargs(node)
 
@@ -291,8 +291,12 @@ def _compile_primitive(node: dict[str, Any], binding: ParamBinding) -> SDFClosur
     return fn
 
 
-def _compile_raster_field(node: dict[str, Any]) -> SDFClosure:
-    """Decode the base64 sample block ONCE at compile time (DR-0003).
+def compile_raster_field(node: dict[str, Any]) -> SDFClosure:
+    """Compile one ``raster_field`` primitive node to a closure.
+
+    Decodes the base64 sample block ONCE at compile time (DR-0003). Public so
+    a tool that walks the tree itself (face labelling) reuses the decoder
+    instead of copying it.
 
     Grid params are topology-class — a ``$ref`` here is rejected the same way
     swept-op pose counts are, not treated as a missing live-uniform feature.
@@ -969,6 +973,7 @@ def _compile_field_node(node: Any, binding: ParamBinding) -> SDFClosure:
 __all__ = [
     "SDFClosure",
     "SDFEvaluator",
+    "compile_raster_field",
     "make_sdf_closure",
     "make_sdf_closure_with_binding",
 ]
