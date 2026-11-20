@@ -171,6 +171,10 @@ def _discriminator_enum_constraint(
 # ===========================================================================
 
 
+#: Mirrors ``extensions.ID_PATTERN`` (imported there would pull the registry in here).
+EXTENSION_ID_PATTERN = r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$"
+
+
 def _sdf_def() -> dict[str, Any]:
     branches = [
         {
@@ -234,6 +238,18 @@ def _sdf_def() -> dict[str, Any]:
                 "params": _params_schema(wire.SWEEP),
             },
             "required": ["child", "params"],
+        },
+        {
+            "properties": {
+                "type": {"const": "extension"},
+                "id": {"type": "string", "pattern": EXTENSION_ID_PATTERN},
+                "version": {"type": "integer", "minimum": 1},
+                "payload": {"type": "object"},
+                "children": {"type": "array", "items": {"$ref": "#/$defs/sdf"}, "minItems": 1},
+                "children_dim": {"enum": [2, 3]},
+                "fallback": {"$ref": "#/$defs/sdf"},
+            },
+            "required": ["id", "version", "payload", "fallback"],
         },
         {
             "properties": {
@@ -948,7 +964,7 @@ def _added_since(version: wire.SchemaVersion) -> list[str]:
     for registry in registries:
         for name, spec in registry.items():
             added.extend(_node_additions(name, spec, version))
-    for spec in (wire.SWEEP, wire.LOFT):
+    for spec in (wire.SWEEP, wire.LOFT, wire.EXTENSION):
         added.extend(_node_additions(spec.name, spec, version))
     for dataclass_name, field_specs in wire.DOCUMENT_FIELDS.items():
         for fspec in field_specs:

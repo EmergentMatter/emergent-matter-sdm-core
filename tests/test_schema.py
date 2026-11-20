@@ -168,7 +168,7 @@ def test_assert_supported_names_version_and_known_set(doc):
     refused: the caller's next move is to pick a version off that list."""
     with pytest.raises(
         ValueError,
-        match=r"Known versions: \['0\.1', '0\.2', '0\.3', '0\.4', '0\.5', '0\.6'\]",
+        match=r"Known versions: \['0\.1', '0\.2', '0\.3', '0\.4', '0\.5', '0\.6', '0\.7'\]",
     ):
         assert_supported(doc)
     with pytest.raises(ValueError, match=repr(doc.get("schema_version"))):

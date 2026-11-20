@@ -198,6 +198,21 @@ def _node_features(node: Any, intervals: dict[str, Interval]) -> list[float | No
             out.extend(_node_features(child, intervals))
         return out
 
+    if node_type == "extension":
+        from software_defined_matter import extensions
+
+        spec = extensions.lookup(node)
+        if spec is None:
+            return _node_features(node.get("fallback"), intervals)
+        if spec.features is None:
+            return []
+        return spec.features(
+            node,
+            extensions.FeatureContext(
+                intervals=intervals, features=lambda t: _node_features(t, intervals)
+            ),
+        )
+
     if node_type in ("transform", "deform", "2d_to_3d", "sweep"):
         # A rigid motion or a lift does not change how thick a wall is. `scale`
         # does, and is handled by scaling the child's features.

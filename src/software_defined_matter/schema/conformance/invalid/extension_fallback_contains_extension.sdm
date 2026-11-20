@@ -1,0 +1,61 @@
+{
+  "schema_version": "0.7",
+  "kind": "part",
+  "name": "conformance_invalid_extension_fallback_contains_extension",
+  "metadata": {},
+  "params": {
+    "h": {
+      "name": "h",
+      "value": 2.0,
+      "unit": "mm",
+      "bounds": [
+        1.0,
+        3.0
+      ],
+      "free": true
+    }
+  },
+  "materials": [
+    {
+      "material_id": 1,
+      "name": "solid",
+      "sdf_tree": {
+        "type": "extension",
+        "id": "conformance.slab",
+        "version": 1,
+        "payload": {
+          "half": {
+            "$ref": "h"
+          },
+          "note": "opaque to the format"
+        },
+        "fallback": {
+          "type": "extension",
+          "id": "conformance.slab",
+          "version": 1,
+          "payload": {
+            "half": {
+              "$ref": "h"
+            },
+            "note": "opaque to the format"
+          },
+          "fallback": {
+            "type": "primitive",
+            "kind": "box",
+            "params": {
+              "b": [
+                2.0,
+                1.0,
+                1.0
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "ports": [],
+  "objectives": [],
+  "constraints": [],
+  "history": []
+}

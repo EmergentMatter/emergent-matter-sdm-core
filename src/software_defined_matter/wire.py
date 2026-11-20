@@ -77,7 +77,7 @@ WIRE_SHAPES: tuple[WireShape, ...] = get_args(WireShape)
 #: with ``model.KNOWN_SCHEMA_VERSIONS`` by ``test_wire_contract.py``, not by
 #: import, so this module never needs the version-ordering machinery in
 #: ``model.py`` to describe a static fact about when a field was added.
-SchemaVersion = Literal["0.1", "0.2", "0.3", "0.4", "0.5", "0.6"]
+SchemaVersion = Literal["0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7"]
 SCHEMA_VERSIONS: tuple[SchemaVersion, ...] = get_args(SchemaVersion)
 
 #: Versioned additions inside static kinematics schema definitions.
@@ -103,6 +103,7 @@ SDFNodeType = Literal[
     "2d_to_3d",
     "sweep",
     "loft",
+    "extension",
 ]
 SDF_NODE_TYPES: tuple[SDFNodeType, ...] = get_args(SDFNodeType)
 
@@ -224,6 +225,7 @@ NodeCategory = Literal[
     "2d_to_3d",
     "sweep",
     "loft",
+    "extension",
     "field_primitive",
     "field_op",
 ]
@@ -757,6 +759,12 @@ SWEEP = NodeSpec(
     ),
 )
 
+#: A node kind a separate package adds: ``id`` / ``version`` / ``payload`` /
+#: ``children`` / ``fallback`` are fixed by the contract, not by ``params``
+#: (see ``software_defined_matter.extensions``). Its dimension is the registered
+#: kind's, so the contract leaves ``dim`` open.
+EXTENSION = NodeSpec("extension", "extension", since="0.7")
+
 #: N 2-D cross-section profiles lofted along Z. ``smooth`` / ``interp`` are
 #: structural flags for the same reason as ``sweep``'s ``path_kind`` above.
 LOFT = NodeSpec(
@@ -1017,6 +1025,7 @@ __all__ = [
     "SDF_NODE_TYPES",
     "SUBTRACT_OPS",
     "SWEEP",
+    "EXTENSION",
     "TILING_TRANSFORMS",
     "TRANSFORMS",
     "TWO_D_TO_3D",

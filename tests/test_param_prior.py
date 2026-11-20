@@ -239,7 +239,7 @@ def test_loading_a_0_1_file_is_warning_free(tmp_path):
 
 
 def test_all_wire_versions_are_known():
-    assert {"0.1", "0.2", "0.3", "0.4", "0.5", "0.6"} == set(KNOWN_SCHEMA_VERSIONS)
+    assert {"0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7"} == set(KNOWN_SCHEMA_VERSIONS)
 
 
 # ---------------------------------------------------------------------------

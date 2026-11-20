@@ -268,7 +268,39 @@ def _compile_node(
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
+    if kind == "extension":
+        return _compile_extension(node, binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
     raise ValueError(f"Unknown SDF node type {kind!r}")
+
+
+def _compile_extension(
+    node: dict[str, Any],
+    binding: ParamBinding,
+    *,
+    b_smooth_csg: bool,
+    d_smooth_k: float,
+) -> SDFClosure:
+    """A registered extension compiles itself; otherwise its fallback stands in."""
+    from software_defined_matter import extensions
+
+    def compile_child(tree: SDFTree, child_binding: extensions.Binding | None = None) -> SDFClosure:
+        inner = binding if child_binding is None else extensions.unwrap_binding(child_binding)
+        return _compile_node(tree, inner, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+
+    spec = extensions.lookup(node)
+    if spec is None:
+        return compile_child(extensions.use_fallback(node, binding))
+    return spec.compile(
+        node,
+        extensions.CompileContext(
+            binding=extensions.Binding(binding),
+            resolve=lambda value, free_vec: resolve_param_value(value, binding, free_vec),
+            compile_child=compile_child,
+            smooth_csg=b_smooth_csg,
+            smooth_k=d_smooth_k,
+            nominal=binding.nominal(),
+        ),
+    )
 
 
 def _primitive_kwargs(node: dict[str, Any]) -> dict[str, Any]:

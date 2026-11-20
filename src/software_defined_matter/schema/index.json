@@ -1,5 +1,5 @@
 {
-  "latest": "0.6",
+  "latest": "0.7",
   "versions": {
     "0.1": {
       "file": "sdm-0.1.schema.json",
@@ -186,6 +186,12 @@
         "scale_axis",
         "shear_linear",
         "taper_linear"
+      ]
+    },
+    "0.7": {
+      "file": "sdm-0.7.schema.json",
+      "added": [
+        "extension"
       ]
     }
   }

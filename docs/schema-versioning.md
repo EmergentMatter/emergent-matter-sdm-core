@@ -19,6 +19,9 @@ You do **not** need a new version for:
   bug fix, not a format change.
 - anything that does not appear in a `.sdm` file.
 
+A new node kind that only one package needs does not need a version of its own: it can be an
+[extension node](extensions.md), which the format already carries.
+
 Generated schemas enumerate primitive, op, transform, modifier and deform
 names. Adding one therefore widens a vocabulary that readers dispatch on and
 requires a new version. Set the node's `since` value to that version.
