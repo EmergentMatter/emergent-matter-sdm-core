@@ -2,6 +2,13 @@
 
 <!-- towncrier release notes start -->
 
+## 1.2.0 (2026-11-20)
+
+### Minor
+
+- Add extension nodes (schema 0.7): a registry lets another package add node kinds, each carrying a public fallback tree that stands in wherever the kind is not registered. Parts that do not use one save the same bytes as before.
+
+
 ## 1.1.0 (2026-11-16)
 
 ### Minor
