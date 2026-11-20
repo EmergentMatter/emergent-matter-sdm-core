@@ -166,6 +166,15 @@ def test_a_promoted_id_is_skipped_silently():
     assert EXT not in extensions.registered_extensions()
 
 
+def test_versions_above_a_promotion_can_still_be_registered():
+    extensions.PROMOTIONS[EXT] = extensions.Promotion(1, lambda n: None)
+    assert extensions.register_extension(_spec(versions=frozenset({1, 2}))) is True
+    assert extensions.registered_extensions()[EXT].versions == frozenset({2})
+    newer = _node()
+    newer["version"] = 2
+    assert extensions.lookup(newer) is not None
+
+
 # -- the node on the wire --------------------------------------------------
 
 
@@ -660,6 +669,20 @@ def test_the_guard_ignores_params_the_fallback_also_uses():
     fallback = sdf_primitive("sphere", r={"$ref": "h"})
     node = sdf_extension(EXT, 1, {"half": {"$ref": "h"}}, fallback)
     part = _part(node, h=Param("h", 2.0, unit="mm", bounds=(1.0, 3.0), free=True))
+    with pytest.warns(extensions.ExtensionFallbackWarning):
+        make_sdf_closure(node, part)
+    (use,) = extensions.extension_uses(part)
+    assert use.frozen_params == ()
+
+
+def test_the_guard_follows_derived_params_the_fallback_uses():
+    fallback = sdf_primitive("sphere", r={"$ref": "d"})
+    node = sdf_extension(EXT, 1, {"half": {"$ref": "a"}}, fallback)
+    part = _part(
+        node,
+        a=Param("a", 2.0, unit="mm", bounds=(1.0, 3.0), free=True),
+        d=Param("d", 4.0, unit="mm", expr=expr_binop("*", expr_num(2.0), expr_param("a"))),
+    )
     with pytest.warns(extensions.ExtensionFallbackWarning):
         make_sdf_closure(node, part)
     (use,) = extensions.extension_uses(part)

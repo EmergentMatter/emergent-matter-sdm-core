@@ -30,7 +30,7 @@ import contextvars
 import re
 import warnings
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
@@ -252,14 +252,19 @@ def register_extension(spec: ExtensionSpec) -> bool:
 
     Registering the same spec again does nothing, and so does a reloaded module
     rebuilding it (same dimension, same ``compile`` module and name). Any other
-    spec for a taken id raises :class:`ExtensionRegistrationError`. An id this package has made
-    native is skipped and returns ``False``: the native kind replaces it, and a
-    package still registering the old id must not fail on import.
+    spec for a taken id raises :class:`ExtensionRegistrationError`. For an id this
+    package has made native, the versions the promotion converts are dropped, and a
+    spec with none left is skipped and returns ``False``: the native kind replaces
+    it, and a package still registering the old id must not fail on import.
     """
     if not isinstance(spec, ExtensionSpec):
         raise ExtensionRegistrationError(f"expected an ExtensionSpec, got {type(spec).__name__}")
-    if spec.id in PROMOTIONS:
-        return False
+    promotion = PROMOTIONS.get(spec.id)
+    if promotion is not None:
+        newer = frozenset(v for v in spec.versions if v > promotion.max_version)
+        if not newer:
+            return False
+        spec = replace(spec, versions=newer)
     taken = _REGISTRY.get(spec.id)
     if taken is not None and taken != spec and not _is_reload(taken, spec):
         raise ExtensionRegistrationError(
@@ -338,9 +343,21 @@ def payload_refs(node: dict[str, Any]) -> set[str]:
     return _refs(node.get("payload")) | _refs(node.get("children"))
 
 
-def lost_refs(node: dict[str, Any]) -> set[str]:
-    """Parameter names that only the node's own kind uses: its fallback ignores them."""
-    return payload_refs(node) - _refs(node.get("fallback"))
+def lost_refs(node: dict[str, Any], relations: Mapping[str, Any] | None = None) -> set[str]:
+    """Parameter names that only the node's own kind uses: its fallback ignores them.
+
+    ``relations`` maps each derived parameter to its expression; a fallback that
+    uses a derived parameter also uses the parameters it is derived from.
+    """
+    used = _refs(node.get("fallback"))
+    pending = list(used)
+    while relations and pending:
+        name = pending.pop()
+        if name in relations:
+            for base in _refs(relations[name]) - used:
+                used.add(base)
+                pending.append(base)
+    return payload_refs(node) - used
 
 
 def use_fallback(node: dict[str, Any], binding: Any = None) -> SDFTree:
@@ -353,7 +370,7 @@ def use_fallback(node: dict[str, Any], binding: Any = None) -> SDFTree:
     ext_id = node.get("id")
     if binding is not None and _FROZEN_PARAMS.get() == "raise":
         live = set(binding.free_names) | set(binding.derived)
-        frozen = sorted(lost_refs(node) & live)
+        frozen = sorted(lost_refs(node, binding.derived) & live)
         if frozen:
             raise ExtensionUnavailableError(
                 f"extension {ext_id!r} (version {node.get('version')!r}) is not available, and "
@@ -417,10 +434,11 @@ def extension_uses(part: Part) -> list[ExtensionUse]:
     """
     out: list[ExtensionUse] = []
     live = {n for n, p in part.params.items() if p.free or p.expr is not None}
+    relations = {n: p.expr for n, p in part.params.items() if p.expr is not None}
     for root, tree in _part_trees(part):
         for path, node in _walk_extensions(tree, root):
             spec = lookup(node)
-            frozen = () if spec else tuple(sorted(lost_refs(node) & live))
+            frozen = () if spec else tuple(sorted(lost_refs(node, relations) & live))
             out.append(
                 ExtensionUse(
                     str(node.get("id")), int(node.get("version", 0)), path, spec is not None, frozen
