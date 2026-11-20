@@ -247,3 +247,26 @@ def test_valid_spacing_is_unchanged(spacing, expected):
     node = sdf_raster_field([0.0] * 3, spacing, _GRID)
     assert tuple(node["params"]["spacing"]) == expected
     assert normalize_spacing(node["params"]) == expected
+
+
+def test_compile_raster_field_is_public_and_matches_the_tree_closure():
+    from software_defined_matter.sdf import compile as sdf_compile
+    from software_defined_matter.sdf.compile import compile_raster_field
+
+    assert "compile_raster_field" in sdf_compile.__all__
+    assert not hasattr(sdf_compile, "_compile_raster_field")
+    node = sdf_raster_field([0, 0, 0], 1.0, _linear_ramp_values())
+    part = Part(name="ramp", materials=[MaterialRegion(material_id=1, name="a", sdf_tree=node)])
+    pts = jnp.asarray([[i, 2.0, 2.0] for i in range(5)] + [[1.5, 1.0, 3.0]], dtype=jnp.float32)
+    direct = compile_raster_field(node)(pts, jnp.zeros(0))
+    via_tree = make_sdf_closure(node, part)(pts)
+    assert np.allclose(np.asarray(direct), np.asarray(via_tree))
+
+
+def test_compile_raster_field_rejects_a_ref_grid_parameter():
+    from software_defined_matter.sdf.compile import compile_raster_field
+
+    node = sdf_raster_field([0, 0, 0], 1.0, _linear_ramp_values())
+    node["params"]["dims"] = {"$ref": "n"}
+    with pytest.raises(ValueError, match="literal"):
+        compile_raster_field(node)
