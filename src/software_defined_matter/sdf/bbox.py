@@ -154,9 +154,8 @@ def _infer_extension_bbox(node: dict[str, Any], intervals: dict[str, Interval]) 
         extensions.BBoxContext(
             intervals=intervals,
             bbox=lambda tree: _infer_node_bbox(tree, intervals),
-            bbox_2d_primitive=lambda tree: _infer_2d_primitive_bbox(tree, intervals),
-            vec_intervals=lambda value, n: _vec_intervals(value, n, intervals),
-            scalar_abs_max=lambda value: _scalar_abs_max(value, intervals),
+            bbox_2d=lambda tree: _infer_2d_primitive_bbox(tree, intervals),
+            value_range=lambda value: _scalar_interval(value, intervals),
         ),
     )
     lo, hi = box

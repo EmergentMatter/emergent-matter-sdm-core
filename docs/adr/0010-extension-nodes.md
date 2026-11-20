@@ -17,7 +17,7 @@ Schema 0.7 adds one node type, `extension`:
 
 - `id` names the kind. The prefix `em.` is a naming convention for Emergent Matter packages; nothing enforces it.
 - `version` is the version of that kind's own payload shape.
-- `payload` is an object this package never interprets. It only finds the `$ref` leaves in it, so a payload may refer to parameters, and it keeps the object unchanged.
+- `payload` is an object this package never interprets. It only finds parameter references in it, so a payload may refer to parameters, and it keeps the object unchanged. Any `{"$ref": name}` or `{"type": "param", "name": ...}` object anywhere in a payload is read as a parameter reference, so a payload cannot use those shapes for anything else.
 - `children` are ordinary SDF subtrees of dimension `children_dim`.
 - `fallback` is required and is an ordinary SDF tree of this package's own kinds. It may not contain an extension.
 
@@ -27,12 +27,12 @@ Where no spec is registered for a node's `id` and `version`, every consumer uses
 
 Using any extension node raises a part's minimum schema version to 0.7. Nothing else about saving changes: parts without an extension write the same bytes as before, and saving never consults the registry.
 
-A kind this package later makes native is recorded in `extensions.PROMOTIONS` with a function that converts its payload. Reading converts such nodes; a read never writes a file, though saving what was read writes the native form. Registering a promoted id is skipped without error.
+A kind this package later makes native is recorded in `extensions.PROMOTIONS` with a function that converts its payload up to a `max_version`. Reading converts such nodes; a read never writes a file, though saving what was read writes the native form. Registering a promoted id keeps only the versions above `max_version`, and is skipped without error when none are left.
 
 ## Consequences
 
 - Another package can add kinds without a fork and without a schema version of its own.
-- Contexts passed to the callbacks are the only surface a kind sees. They are API and stay stable.
+- Contexts passed to the callbacks are the only surface a kind sees. They are API and stay stable, so they are kept small: a compile callback sees parameters through a `Binding` with only `get` and `layered`, and a bbox callback gets `bbox`, `bbox_2d` and `value_range`, not this package's interval helpers.
 - A reader older than the release that knows schema 0.7 cannot open a document that uses an extension.
 - A fallback is a snapshot. Nothing detects that one has gone stale; `refresh_fallbacks` rebuilds fallbacks on request.
 - A shader draws the fallback of every extension, and `GLSLEmission.fallbacks` names them so a viewer can say the picture is approximate. A shader routine for an extension is future work and needs no schema change.

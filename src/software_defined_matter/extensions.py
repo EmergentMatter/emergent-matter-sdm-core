@@ -29,7 +29,7 @@ import contextlib
 import contextvars
 import re
 import warnings
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -46,6 +46,7 @@ __all__ = [
     "PROMOTIONS",
     "Promotion",
     "BBoxContext",
+    "Binding",
     "CompileContext",
     "EnvelopeContext",
     "FeatureContext",
@@ -98,18 +99,45 @@ class ExtensionFallbackWarning(UserWarning):
 # ---------------------------------------------------------------------------
 
 
+class Binding:
+    """The part's parameters as a kind sees them: ``get`` and ``layered``, nothing else.
+
+    ``get(name, free_vec)`` is a parameter's JAX value. ``layered(names, getter)``
+    is a binding that serves ``names`` from ``getter(name, free_vec)`` and the rest
+    as this one does, derived parameters included; pass it to
+    ``CompileContext.compile_child`` to evaluate a subtree with values of the kind's own.
+    """
+
+    __slots__ = ("_inner",)
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+
+    def get(self, name: str, free_vec: Any) -> Any:
+        return self._inner.get(name, free_vec)
+
+    def layered(self, names: Iterable[str], getter: Callable[[str, Any], Any]) -> Binding:
+        return Binding(self._inner.layered(names, getter))
+
+
+def unwrap_binding(binding: Binding) -> Any:
+    """The ``ParamBinding`` behind ``binding``. For this package's compiler, not for kinds."""
+    return binding._inner
+
+
 @dataclass(frozen=True)
 class CompileContext:
     """What :attr:`ExtensionSpec.compile` may use.
 
-    ``binding`` is the part's :class:`~software_defined_matter.dsl.resolve.ParamBinding`.
+    ``binding`` is the part's parameters as a :class:`Binding`.
     ``resolve(value, free_vec)`` turns a payload leaf (a number, a list, a
     ``$ref``, an expression) into a JAX value. ``compile_child(tree, binding)``
-    compiles an SDF subtree, with ``binding`` when given. ``nominal`` maps each
-    non-derived parameter to its value now, for plans made once at compile time.
+    compiles an SDF subtree, with ``binding`` (a :class:`Binding`) when given.
+    ``nominal`` maps each non-derived parameter to its value now, for plans made
+    once at compile time.
     """
 
-    binding: Any
+    binding: Binding
     resolve: Callable[[Any, Any], Any]
     compile_child: Callable[..., Any]
     smooth_csg: bool
@@ -119,13 +147,19 @@ class CompileContext:
 
 @dataclass(frozen=True)
 class BBoxContext:
-    """What :attr:`ExtensionSpec.bbox` may use. ``intervals`` maps param names to value ranges."""
+    """What :attr:`ExtensionSpec.bbox` may use.
+
+    ``intervals`` maps param names to value ranges. ``bbox(tree)`` bounds a 3-D
+    subtree as ``((x0, y0, z0), (x1, y1, z1))``; ``bbox_2d(tree)`` bounds a 2-D
+    primitive as ``((x0, y0), (x1, y1))``. ``value_range(leaf)`` is ``(lo, hi)`` for
+    one scalar payload leaf (a number, a ``$ref``, an expression); map it over a
+    list's items for a vector.
+    """
 
     intervals: Mapping[str, tuple[float, float]]
     bbox: Callable[[Any], Any]
-    bbox_2d_primitive: Callable[[Any], Any]
-    vec_intervals: Callable[[Any, int], Any]
-    scalar_abs_max: Callable[[Any], float]
+    bbox_2d: Callable[[Any], Any]
+    value_range: Callable[[Any], tuple[float, float]]
 
 
 @dataclass(frozen=True)

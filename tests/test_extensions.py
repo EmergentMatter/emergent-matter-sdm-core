@@ -68,7 +68,8 @@ def _compile(node, ctx):
 
 
 def _bbox(node, ctx):
-    h = ctx.scalar_abs_max(node["payload"]["half"])
+    lo, hi = ctx.value_range(node["payload"]["half"])
+    h = max(abs(lo), abs(hi))
     return ((-h, -h, -h), (h, h, h))
 
 
@@ -407,17 +408,17 @@ def test_bbox_context_supplies_interval_helpers():
     seen = {}
 
     def bbox(node, ctx):
-        seen["abs"] = ctx.scalar_abs_max({"$ref": "h"})
-        seen["vec"] = ctx.vec_intervals([{"$ref": "h"}, 1.0], 2)
+        seen["range"] = ctx.value_range({"$ref": "h"})
+        seen["expr"] = ctx.value_range(expr_binop("*", expr_num(-2.0), expr_param("h")))
         seen["tree"] = ctx.bbox(sdf_primitive("sphere", r=2.0))
-        seen["p2"] = ctx.bbox_2d_primitive(sdf_primitive("circle_2d", r=1.5))
+        seen["p2"] = ctx.bbox_2d(sdf_primitive("circle_2d", r=1.5))
         return ((-1.0,) * 3, (1.0,) * 3)
 
     extensions.register_extension(_spec(bbox=bbox))
     node = _node()
     infer_sdf_bbox(node, _part(node, h=Param("h", 2.0, unit="mm", bounds=(1.0, 3.0), free=True)))
-    assert seen["abs"] == 3.0
-    assert seen["vec"] == ((1.0, 3.0), (1.0, 1.0))
+    assert seen["range"] == (1.0, 3.0)
+    assert seen["expr"] == (-6.0, -2.0)
     assert seen["tree"] == ((-2.0, -2.0, -2.0), (2.0, 2.0, 2.0))
     assert seen["p2"] == ((-1.5, -1.5), (1.5, 1.5))
 
@@ -485,6 +486,21 @@ def test_compile_child_and_nominal_are_available_to_the_kind():
     d = _at(node, [0.0, 0.0, 0.0], part)
     assert d == pytest.approx(-1.5)
     assert seen["nominal"] == {"k": 3.0, "f": 4.0}
+
+
+def test_a_kind_compiles_a_child_through_a_layered_binding():
+    seen = {}
+
+    def compile_(node, ctx):
+        seen["public"] = {n for n in dir(ctx.binding) if not n.startswith("_")}
+        layered = ctx.binding.layered(["r"], lambda name, v: jnp.asarray(3.0))
+        return ctx.compile_child(node["children"][0], layered)
+
+    extensions.register_extension(_spec(compile=compile_))
+    node = _node(children=[sdf_primitive("sphere", r={"$ref": "r"})], children_dim=3)
+    part = _part(node, r=Param("r", 1.0, unit="mm"))
+    assert _at(node, [0.0, 0.0, 0.0], part) == pytest.approx(-3.0)
+    assert seen["public"] == {"get", "layered"}
 
 
 def test_payload_param_gradient_flows_through_a_registered_kind():

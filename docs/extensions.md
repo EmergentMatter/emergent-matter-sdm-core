@@ -29,7 +29,8 @@ Optional hooks: `validate`, `features`, `envelope`, `make_fallback`, `csg_like` 
 ## Rules
 
 - Read parameters through `ctx.resolve(value, free_vec)` so `$ref` values and gradients work.
-- `ctx.binding.layered(names, getter)` evaluates a subtree with values of your own, such as a number interpolated per point.
+- `ctx.binding.layered(names, getter)` evaluates a subtree with values of your own, such as a number interpolated per point: pass it to `ctx.compile_child(tree, binding)`.
+- In `bbox`, bound a payload leaf with `ctx.value_range(leaf)`, which returns `(lo, hi)`.
 - A payload is untrusted input. Check it in `validate`.
 - Raise the `version` when the payload's shape changes. A spec reads only the versions it lists; any other version falls back.
 - Do not rely on anything outside the contexts.

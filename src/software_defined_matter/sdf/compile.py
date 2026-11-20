@@ -283,10 +283,9 @@ def _compile_extension(
     """A registered extension compiles itself; otherwise its fallback stands in."""
     from software_defined_matter import extensions
 
-    def compile_child(tree: SDFTree, child_binding: ParamBinding | None = None) -> SDFClosure:
-        return _compile_node(
-            tree, child_binding or binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k
-        )
+    def compile_child(tree: SDFTree, child_binding: extensions.Binding | None = None) -> SDFClosure:
+        inner = binding if child_binding is None else extensions.unwrap_binding(child_binding)
+        return _compile_node(tree, inner, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
 
     spec = extensions.lookup(node)
     if spec is None:
@@ -294,7 +293,7 @@ def _compile_extension(
     return spec.compile(
         node,
         extensions.CompileContext(
-            binding=binding,
+            binding=extensions.Binding(binding),
             resolve=lambda value, free_vec: resolve_param_value(value, binding, free_vec),
             compile_child=compile_child,
             smooth_csg=b_smooth_csg,
