@@ -2,6 +2,13 @@
 
 <!-- towncrier release notes start -->
 
+## 1.3.0 (2026-11-21)
+
+### Minor
+
+- Make compile_raster_field public in software_defined_matter.sdf.compile, so tools that walk an SDF tree reuse the raster decoder.
+
+
 ## 1.2.0 (2026-11-20)
 
 ### Minor
