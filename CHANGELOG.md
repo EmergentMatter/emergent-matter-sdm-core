@@ -8,13 +8,11 @@
 
 - Make compile_raster_field public in software_defined_matter.sdf.compile, so tools that walk an SDF tree reuse the raster decoder.
 
-
 ## 1.2.0 (2026-11-20)
 
 ### Minor
 
 - Add extension nodes (schema 0.7): a registry lets another package add node kinds, each carrying a public fallback tree that stands in wherever the kind is not registered. Parts that do not use one save the same bytes as before.
-
 
 ## 1.1.0 (2026-11-16)
 
@@ -29,13 +27,11 @@
 - The consumer conformance README now lists the raster_field and kinematics_roundtrip fixtures, which were in the corpus but missing from its layout table.
 - infer_sdf_max_rate now returns UNKNOWN for helix, pyramid and raster_field instead of a unit rate: a helix's value jumps across its axis, a pyramid's across its base plane, and a raster's rate follows its samples, so none of them has an established unit bound.
 
-
 ## 1.0.1 (2026-10-29)
 
 ### Patch
 
 - capped_torus and solid_angle now use only the direction of their [sin, cos] angle vector, so a vector off the unit circle no longer moves the surface or returns NaN, and capped_torus stays finite on its own centreline.
-
 
 ## 1.0.0 (2026-10-03)
 
