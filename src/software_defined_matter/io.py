@@ -8,7 +8,9 @@ a convention; the wire format is UTF-8 JSON.
 
 from __future__ import annotations
 
+import functools
 import json
+import math
 import os
 import warnings
 from pathlib import Path
@@ -63,6 +65,61 @@ def load_schema(version: str | None = None) -> dict[str, Any]:
         return json.load(fh)
 
 
+@functools.cache
+def _compiled_schema(version: str) -> Any:
+    """``jsonschema-rs``'s compiled validator for ``version``, or ``None`` without the package.
+
+    It implements draft 2020-12 in full, ``unevaluatedProperties`` included, and checks a CEM
+    document of about 24,000 numbers in about a millisecond where ``jsonschema`` takes seconds
+    (every number may also be an expression, so each is tried against both).
+    """
+    try:
+        import jsonschema_rs
+    except ImportError:
+        return None
+    return jsonschema_rs.validator_for(load_schema(version))
+
+
+def _is_plain_json(node: Any) -> bool:
+    """Whether ``node`` holds only what JSON can carry, by exact type: dicts with string keys,
+    lists, strings, booleans, None, ints and finite floats. A numpy scalar or array, a tuple, or
+    a NaN or infinity makes it False."""
+    t = type(node)
+    if t is dict:
+        return all(type(k) is str and _is_plain_json(v) for k, v in node.items())
+    if t is list:
+        return all(_is_plain_json(v) for v in node)
+    if t is float:
+        return math.isfinite(node)
+    return t in (str, int, bool) or node is None
+
+
+def validate_schema(doc: dict[str, Any]) -> None:
+    """Check ``doc`` against the JSON Schema of its declared version.
+
+    The compiled validator decides for a plain-JSON document; when it rejects, ``jsonschema``
+    runs on the same document so the error raised is the reference implementation's
+    ``ValidationError``, with its path and message. A document holding anything JSON cannot
+    carry (numpy scalars from a Python build, NaN, infinity, which Python's jsonschema takes as
+    numbers and sdm-core's semantic checks reject later) goes to ``jsonschema`` alone, as does
+    every document when ``jsonschema-rs`` is not installed.
+    ``tests/test_schema_validators_agree.py`` holds the two to the same verdict.
+    """
+    import jsonschema
+
+    version = _schema_version_for(doc)
+    compiled = _compiled_schema(version) if _is_plain_json(doc) else None
+    if compiled is not None and compiled.is_valid(doc):
+        return
+    jsonschema.validate(doc, load_schema(version))
+    if compiled is not None:  # the reference accepts a plain-JSON document jsonschema-rs rejected
+        warnings.warn(
+            "jsonschema-rs rejected a document that jsonschema accepts; the document is accepted. "
+            "Please report it with the document.",
+            stacklevel=2,
+        )
+
+
 def _schema_version_for(doc: dict[str, Any]) -> str:
     """The schema version to validate ``doc`` against.
 
@@ -103,8 +160,6 @@ def validate(source: PathLike | dict[str, Any] | Part | Assembly) -> None:
         software_defined_matter.sdf.param_refs.ParamRelationError: If a
             parameter relation contains a metric or participates in a cycle.
     """
-    import jsonschema
-
     from software_defined_matter.assembly.model import Assembly
     from software_defined_matter.sdf.param_refs import (
         validate_param_refs,
@@ -123,7 +178,7 @@ def validate(source: PathLike | dict[str, Any] | Part | Assembly) -> None:
         with Path(source).open() as fh:
             doc = json.load(fh)
 
-    jsonschema.validate(doc, load_schema(_schema_version_for(doc)))
+    validate_schema(doc)
     if doc.get("kind") == "assembly":
         Assembly.from_dict(doc)
         return
