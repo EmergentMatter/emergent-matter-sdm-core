@@ -24,6 +24,7 @@ from software_defined_matter.assembly import (
     compile_placement,
     load_bundle,
 )
+from software_defined_matter.compile_cache import enable_compile_cache
 from software_defined_matter.io import load, load_part, load_schema, save, validate
 from software_defined_matter.model import (
     KNOWN_SCHEMA_VERSIONS,
@@ -86,6 +87,7 @@ def __dir__() -> list[str]:
 
 
 __all__ = [
+    "enable_compile_cache",
     "PlacementEval",
     "PlacementState",
     "PlacementError",
