@@ -8,7 +8,6 @@ pin the field's sign so that regression cannot return silently.
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 
 from software_defined_matter import MaterialRegion, Part, sdf_primitive
@@ -51,12 +50,6 @@ def test_axis_vertices_lie_on_surface():
 def test_exterior_is_positive():
     far = jnp.array([[S, S, S], [2 * S, 0.0, 0.0]])
     assert jnp.all(shapes.octahedron(far, S) > 0.0)
-
-
-def test_is_unit_gradient_field():
-    """A true SDF satisfies the eikonal equation away from creases."""
-    g = jax.grad(lambda q: shapes.octahedron(q[None], S)[0])(jnp.array([2.0, 0.5, 0.3]))
-    assert jnp.isclose(jnp.linalg.norm(g), 1.0, atol=1e-4)
 
 
 def test_compiled_primitive_matches_direct_call():

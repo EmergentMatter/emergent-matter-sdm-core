@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import math
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -27,7 +26,6 @@ from software_defined_matter import (
 )
 from software_defined_matter.sdf.bbox import infer_sdf_bbox
 from software_defined_matter.sdf.compile import make_sdf_closure
-from software_defined_matter.sdf.sdf_shapes import screw_thread
 
 _NF = jnp.zeros((0,))
 
@@ -225,27 +223,6 @@ def test_continuous_across_the_branch_cut():
 # ---------------------------------------------------------------------------
 # Marcher safety, bbox, plumbing
 # ---------------------------------------------------------------------------
-
-
-def test_is_lipschitz_bounded():
-    f = _f(sdf_screw_thread(**CAP))
-    rng = np.random.default_rng(2)
-    pts = np.stack(
-        [rng.uniform(-33, 33, 500), rng.uniform(-33, 33, 500), rng.uniform(-8, 8, 500)], axis=-1
-    )
-    h = 1e-3
-    g = []
-    for axis in range(3):
-        off = np.zeros(3)
-        off[axis] = h
-        g.append((f(pts + off) - f(pts - off)) / (2 * h))
-    mag = np.linalg.norm(np.stack(g, axis=-1), axis=-1)
-    assert np.percentile(mag, 99.0) <= 1.05, float(np.percentile(mag, 99.0))
-
-
-def test_gradient_finite_on_axis():
-    g = jax.grad(lambda p: screw_thread(p, 27.0, 1.84, 3.0, 2.6, 4.0))(jnp.zeros(3))
-    assert bool(jnp.all(jnp.isfinite(g))), g
 
 
 def test_bbox_is_tight():

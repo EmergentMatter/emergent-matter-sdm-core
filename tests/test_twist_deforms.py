@@ -24,6 +24,7 @@ a plain ``$ref`` with nowhere to hang a negation.
 
 from __future__ import annotations
 
+import math
 import re
 
 import jax.numpy as jnp
@@ -319,3 +320,11 @@ def test_twist_radial_glsl_transcription_matches_jax():
     np.testing.assert_allclose(
         _glsl_twist_radial(p, 0.2, 2.5, -ANGLE, ANGLE), got, rtol=1e-6, atol=1e-6
     )
+
+
+def test_query_signs_remain_distinct_for_existing_radial_and_linear_operators():
+    p = jnp.array([3.0, 0, 0])
+    radial = ops.op_twist_radial(lambda q: q, p, 0.0, 1.0, 0.0, math.pi / 2)
+    linear = ops.op_twist_linear(lambda q: q, p, [1.0, 0], 0.0, 1.0, 0.0, math.pi / 2)
+    np.testing.assert_allclose(radial, [0, -3, 0], atol=2e-6)
+    np.testing.assert_allclose(linear, [0, 3, 0], atol=2e-6)

@@ -4,13 +4,12 @@
 ``vec2`` param, so an optimiser moves the two components independently and the
 vector leaves the unit circle on its first step. The field must not care:
 scaling the vector changes neither the surface nor the distance, in JAX or in
-the GLSL preview. ``capped_torus`` must also stay finite on its own centreline,
-where IQ's expanded ``sqrt`` cancels to a negative argument in float32.
+the GLSL preview. (That ``capped_torus`` stays finite on its own centreline is
+pinned in ``tests/test_sdf_is_distance.py``.)
 """
 
 from __future__ import annotations
 
-import math
 import os
 
 import jax
@@ -56,35 +55,6 @@ def test_direction_param_length_does_not_change_the_field(kind, vec_name, kw, de
     expected = fn(p, **{vec_name: unit}, **kw)
     got = fn(p, **{vec_name: scale * unit}, **kw)
     np.testing.assert_allclose(np.asarray(got), np.asarray(expected), atol=FLOAT32_ATOL)
-
-
-def test_capped_torus_is_finite_on_its_centreline():
-    """The circle the arc lies on gives finite values and gradients everywhere,
-    and depth exactly ``rb`` where it is the arc.
-
-    The angle sweep crosses the cap at 120 deg, so both branches (the arc's end
-    and the foot on the circle) are hit. Before the rewrite, hundreds of these
-    values and every one of these gradients were NaN in float32.
-    """
-    ra, rb = 7.3, 2.2
-    sc = jnp.asarray(_sc(120.0), dtype=jnp.float32)
-    th = np.linspace(-3.0, 3.0, 20_001)  # +-172 deg, past the cap on both sides
-    p = jnp.asarray(
-        np.stack([ra * np.sin(th), ra * np.cos(th), np.zeros_like(th)], axis=-1),
-        dtype=jnp.float32,
-    )
-
-    def scalar(x):
-        return sdf_shapes.capped_torus(x[None], sc, ra, rb)[0]
-
-    values = jax.vmap(scalar)(p)
-    grads = jax.vmap(jax.grad(scalar))(p)
-    assert bool(jnp.all(jnp.isfinite(grads)))
-    # Inside the cap the centreline is the arc, at depth exactly rb; beyond it
-    # the nearest centreline point is the arc's end, so the value only rises.
-    inside_cap = np.abs(th) <= math.radians(120.0)
-    np.testing.assert_allclose(np.asarray(values)[inside_cap], -rb, atol=FLOAT32_ATOL)
-    assert bool(jnp.all(values >= -rb - FLOAT32_ATOL))
 
 
 @pytest.mark.parametrize("kind,vec_name,kw,deg", CASES, ids=IDS)
