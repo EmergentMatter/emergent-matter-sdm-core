@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -16,6 +17,7 @@ from software_defined_matter import (
     sdf_transform,
     wire,
 )
+from software_defined_matter.sdf.bake import bake_raster_field
 from software_defined_matter.sdf.compile import make_sdf_closure
 from software_defined_matter.sdf.exactness import (
     EXACT,
@@ -170,6 +172,7 @@ def test_derived_parameters_do_not_supply_a_false_disjointness_proof(cached):
         params={"offset": Param("offset", cached, expr={"type": "num", "value": 1})},
     )
     assert _sides(tree, part) == (UNKNOWN, UNKNOWN)
+    assert make_sdf_closure(tree, part).distance_exactness.inside == UNKNOWN
     assert part.params["offset"].value is cached
 
 
@@ -193,3 +196,33 @@ def test_tube_radius_parameter_bounds_must_preserve_the_hole():
     part = _part(tree, params={"r": Param("r", 0.2, free=True, bounds=(0.1, 2))})
     assert _sides(tree, part) == (EXACT, LOWER_BOUND)
     assert _sides(tree, part, mode="values") == (EXACT, EXACT)
+
+
+def test_contract_attachment_does_not_change_jitted_parameter_gradients():
+    tree = sdf_primitive("sphere", r={"$ref": "r"})
+    part = _part(tree, params={"r": Param(name="r", value=1, bounds=(0.5, 2), free=True)})
+    fn = make_sdf_closure(tree, part)
+    grad = jax.jit(jax.grad(lambda free: fn(jnp.array([2.0, 0.0, 0.0]), free)))
+    assert np.asarray(grad(jnp.array([1.0]))) == pytest.approx([-1], abs=1e-6)
+    assert fn.distance_exactness.outside == UNKNOWN
+    assert infer_sdf_exactness(tree, part).is_exact
+
+
+def test_bake_provenance_distinguishes_source_and_interpolant():
+    fn = make_sdf_closure(_sphere(), _part())
+    node = bake_raster_field(fn, ((-2, -2, -2), (2, 2, 2)), 1)
+    prov = node["params"]["provenance"]
+    assert prov["source_distance_exactness"]["outside"] == "exact"
+    assert prov["distance_exactness"]["outside"] == "unknown"
+    assert _sides(node) == (UNKNOWN, UNKNOWN)
+
+
+def test_opaque_bake_callable_cannot_inherit_claimed_provenance():
+    fn = make_sdf_closure(_sphere(), _part())
+    node = bake_raster_field(
+        lambda p: fn(p),
+        ((-2, -2, -2), (2, 2, 2)),
+        1,
+        provenance={"source_distance_exactness": {"outside": "exact"}},
+    )
+    assert node["params"]["provenance"]["source_distance_exactness"]["outside"] == "unknown"

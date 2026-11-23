@@ -50,6 +50,7 @@ def test_nonfinite_rigid_literals_cannot_inherit_exactness(transform, value):
     part = _part(tree)
     contract = infer_sdf_exactness(tree, part)
     assert contract.outside == contract.inside == UNKNOWN
+    assert not make_sdf_closure(tree, part).distance_exactness.is_exact
 
 
 @pytest.mark.parametrize("transform", TRANSFORMS)
@@ -66,8 +67,8 @@ def test_finite_rigid_ranges_and_fixed_values_preserve_exactness(transform):
     part = _part(tree, params={"x": Param("x", 1, free=True, bounds=(0.5, 2), unit="ratio")})
     assert infer_sdf_exactness(tree, part).is_exact
     fixed = _part(tree, params={"x": Param("x", 1, free=False, unit="ratio")})
-    assert infer_sdf_exactness(tree, fixed).is_exact
     fn = make_sdf_closure(tree, fixed)
+    assert fn.distance_exactness.is_exact
     point = jnp.array([2.0, 0.0, 0.0], dtype=jnp.float32)
     expected = 0 if transform == "translate" else 1
     assert float(jax.jit(fn)(point)) == pytest.approx(expected, abs=1e-6)

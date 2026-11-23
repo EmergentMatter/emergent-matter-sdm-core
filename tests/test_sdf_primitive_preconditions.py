@@ -87,7 +87,7 @@ def test_rounded_cylinder_with_negative_core_radius_is_not_exact_outside():
     assert float(fn(jnp.array([0.0, 0.0, boundary_z]))) == pytest.approx(0, abs=2e-6)
     assert float(fn(p)) == pytest.approx(math.sqrt(17) - 3, abs=2e-6)
     assert float(fn(p)) < 5 - boundary_z - 0.01
-    assert infer_sdf_exactness(tree, part).outside == UNKNOWN
+    assert fn.distance_exactness.outside == UNKNOWN
 
 
 @pytest.mark.parametrize(
@@ -143,7 +143,7 @@ def test_reflex_sector_retains_only_a_bound_inside():
     # The nearest boundary at (1,0,0) is the inner circle, 0.9 away.
     assert float(fn(jnp.array([1.0, 0.0, 0.0]))) == pytest.approx(-math.sin(2.5), abs=2e-6)
     assert float(fn(jnp.array([0.1, 0.0, 0.0]))) == pytest.approx(0, abs=2e-6)
-    assert infer_sdf_exactness(tree, part).inside == LOWER_BOUND
+    assert fn.distance_exactness.inside == LOWER_BOUND
     params["half_angle"] = 1
     assert _contract("annular_sector", params).inside == EXACT
 

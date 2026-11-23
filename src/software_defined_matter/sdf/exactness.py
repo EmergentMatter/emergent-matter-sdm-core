@@ -26,6 +26,7 @@ from software_defined_matter.sdf.bbox import (
 )
 
 if TYPE_CHECKING:
+    from software_defined_matter.dsl.resolve import ParamBinding
     from software_defined_matter.model import Part, SDFTree
 
 
@@ -175,6 +176,27 @@ def infer_sdf_exactness(
     intervals = _parameter_intervals(part, mode)
     smooth = bool(part.metadata.get("smooth_csg", False)) if b_smooth_csg is None else b_smooth_csg
     return _infer(tree, intervals, smooth)
+
+
+def _infer_binding_exactness(
+    tree: SDFTree, binding: ParamBinding, *, b_smooth_csg: bool
+) -> DistanceExactness:
+    """Infer a callable-wide contract from the constants its compiler captured.
+
+    Free-vector arguments are unrestricted, even when the Part declares bounds.
+    Advertising a range proof on that callable would let later eager or JIT
+    evaluations silently escape it. Derived values remain unresolved.
+    """
+    from software_defined_matter.dsl.resolve import ParamBinding
+
+    if not isinstance(binding, ParamBinding):
+        return _unknown("binding adapter has no captured parameter-domain proof")
+    if binding.n_free():
+        return _unknown("free-vector evaluation does not enforce parameter bounds")
+    if not all(math.isfinite(value) for value in binding.fixed.values()):
+        return _unknown("captured fixed parameters must be finite")
+    intervals = {name: (value, value) for name, value in binding.fixed.items()}
+    return _infer(tree, intervals, b_smooth_csg)
 
 
 def _parameter_intervals(part: Part, mode: str) -> dict[str, Interval]:

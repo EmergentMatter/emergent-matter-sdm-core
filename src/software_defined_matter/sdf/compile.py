@@ -22,6 +22,7 @@ functions in :mod:`software_defined_matter.sdf.sdf_shapes`,
 from __future__ import annotations
 
 from collections.abc import Callable
+from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Protocol
 
 import jax.numpy as jnp
@@ -40,6 +41,7 @@ from software_defined_matter.sdf._helpers import _length
 
 if TYPE_CHECKING:
     from software_defined_matter.model import Part, SDFTree
+    from software_defined_matter.sdf.exactness import DistanceExactness
 
 
 SDFClosure = Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
@@ -58,6 +60,7 @@ class SDFEvaluator(Protocol):
     """
 
     binding: ParamBinding
+    distance_exactness: DistanceExactness
 
     def __call__(self, points: jnp.ndarray, free_vec: jnp.ndarray | None = None) -> jnp.ndarray: ...
 
@@ -128,6 +131,17 @@ def make_sdf_closure(
 ) -> SDFEvaluator:
     """Return a ``(points, free_vec) -> distance`` closure for ``tree``.
 
+    Compilation and distance inference share a private deep
+    snapshot of ``tree``. Later edits to the source dictionaries or nested
+    parameter lists do not change the evaluator; recompile to apply them.
+    Explicit free-parameter vectors remain live inputs.
+
+    The closure carries ``distance_exactness`` for its captured fixed values,
+    not the Part's declared bounds. A closure accepting free parameters carries
+    UNKNOWN because its ``free_vec`` argument is unrestricted, including under
+    JIT. Use ``infer_sdf_exactness`` separately for a conditional bounds proof.
+    Contracts describe field values, not gradient smoothness.
+
     Args:
         tree: SDF expression tree (as produced by the builders in
             :mod:`software_defined_matter.model` or loaded from a ``.sdm`` file).
@@ -137,6 +151,7 @@ def make_sdf_closure(
             ``part.metadata.get("smooth_csg", False)``. Pass ``True`` or
             ``False`` to override the metadata value.
     """
+    tree = deepcopy(tree)
     if b_smooth_csg is None:
         b_smooth_csg = bool(part.metadata.get("smooth_csg", False))
     binding = make_binding(part)
@@ -152,6 +167,11 @@ def make_sdf_closure(
             free_vec = binding.initial_free_vector()
         return node_fn(jnp.asarray(points), jnp.asarray(free_vec))
 
+    from software_defined_matter.sdf.exactness import _infer_binding_exactness
+
+    evaluate_sdf.distance_exactness = _infer_binding_exactness(  # type: ignore[attr-defined]
+        tree, binding, b_smooth_csg=b_smooth_csg
+    )
     evaluate_sdf.binding = binding  # type: ignore[attr-defined]
     # The dynamic attribute above is what makes evaluate_sdf satisfy
     # SDFEvaluator at runtime; mypy cannot see an attribute attached after
@@ -173,13 +193,15 @@ def make_sdf_closure_with_binding(
     ``evaluate_sdf(points, free_vec=None) -> jnp.ndarray``. When ``free_vec``
     is ``None``, ``binding.initial_free_vector()`` is used. Both inputs are
     coerced via ``jnp.asarray``. The closure also carries a ``.binding``
-    attribute.
+    attribute. The source tree is privately snapshotted just as in
+    :func:`make_sdf_closure`; the supplied binding is still reused.
 
     ``b_smooth_csg=None`` resolves to ``False`` here because no ``Part`` is
     available to consult metadata. Pass ``True`` explicitly or prefer
     :func:`make_sdf_closure` (which reads ``part.metadata["smooth_csg"]``)
     when metadata-driven behaviour is desired.
     """
+    tree = deepcopy(tree)
     if b_smooth_csg is None:
         b_smooth_csg = False
     node_fn = _compile_node(
@@ -194,6 +216,11 @@ def make_sdf_closure_with_binding(
             free_vec = binding.initial_free_vector()
         return node_fn(jnp.asarray(points), jnp.asarray(free_vec))
 
+    from software_defined_matter.sdf.exactness import UNKNOWN, DistanceExactness
+
+    evaluate_sdf.distance_exactness = DistanceExactness(  # type: ignore[attr-defined]
+        UNKNOWN, UNKNOWN, "binding-only compilation has no parameter-range contract"
+    )
     evaluate_sdf.binding = binding  # type: ignore[attr-defined]
     # The dynamic attribute above is what makes evaluate_sdf satisfy
     # SDFEvaluator at runtime; mypy cannot see an attribute attached after

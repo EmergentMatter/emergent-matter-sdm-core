@@ -62,9 +62,13 @@ def test_extrusion_preserves_only_justified_child_sides(profile, outside, inside
     tree, part = _extrusion(profile)
     contract = infer_sdf_exactness(tree, part)
     assert (contract.outside, contract.inside) == (outside, inside)
+    compiled = make_sdf_closure(tree, part)
+    # Free vectors are unrestricted at runtime, so their compiled contract
+    # must not reuse a conditional proof over declared parameter bounds.
+    assert compiled.distance_exactness.outside == compiled.distance_exactness.inside == UNKNOWN
     tree["params"]["h"] = 2
     fixed = Part(name="fixed", materials=[MaterialRegion(1, "body", tree)])
-    fixed_contract = infer_sdf_exactness(tree, fixed)
+    fixed_contract = make_sdf_closure(tree, fixed).distance_exactness
     assert (fixed_contract.outside, fixed_contract.inside) == (outside, inside)
 
 

@@ -1,0 +1,1 @@
+Infer compiled distance contracts from captured fixed values rather than declared bounds or pose envelopes. Mark unrestricted free-vector evaluators unknown, retaining explicit bounds inference for conditional proofs. Record source contracts separately from the unknown accuracy of baked interpolants.
