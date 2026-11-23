@@ -191,16 +191,15 @@ def validate_schema(doc: dict[str, Any]) -> None:
     ``ValidationError``, with its path and message. A document holding anything JSON cannot
     carry (numpy scalars from a Python build, NaN, infinity, which Python's jsonschema takes as
     numbers and sdm-core's semantic checks reject later) goes to ``jsonschema`` alone, as does
-    every document when ``jsonschema-rs`` is not installed.
+    every document when ``jsonschema-rs`` is not installed. That reference path runs through
+    ``_validate_json_schema``, which bounds the repeated reference checks of nested expressions.
     ``tests/test_schema_validators_agree.py`` holds the two to the same verdict.
     """
-    import jsonschema
-
     version = _schema_version_for(doc)
     compiled = _compiled_schema(version) if _is_plain_json(doc) else None
     if compiled is not None and compiled.is_valid(doc):
         return
-    jsonschema.validate(doc, load_schema(version))
+    _validate_json_schema(doc, load_schema(version))
     if compiled is not None:  # the reference accepts a plain-JSON document jsonschema-rs rejected
         warnings.warn(
             "jsonschema-rs rejected a document that jsonschema accepts; the document is accepted. "

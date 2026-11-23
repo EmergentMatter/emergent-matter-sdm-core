@@ -1,1 +1,1 @@
-Nested expressions validate faster by reusing successful schema-reference checks within one validation call, while preserving standard errors and rechecking later edits.
+Schema validation's reference path, which rejected documents, documents holding numpy values or non-finite floats, and installs without jsonschema-rs take, reuses successful schema-reference checks within one validation call. Nested expressions no longer take exponential time there; errors are unchanged and later edits are rechecked.

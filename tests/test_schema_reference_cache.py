@@ -1,4 +1,9 @@
-"""Structural validation keeps standard errors and never reuses stale successes."""
+"""Structural validation keeps standard errors and never reuses stale successes.
+
+These tests drive the reference path of `io.validate_schema`, the one rejected documents,
+documents holding numpy values or non-finite floats, and installs without jsonschema-rs take.
+`_reference_path` turns the compiled validator off so each test reaches it.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +13,7 @@ import jsonschema
 import pytest
 
 from software_defined_matter import MaterialRegion, Param, Part, sdf_primitive
+from software_defined_matter import io as sdm_io
 from software_defined_matter.dsl.expr import expr_binop, expr_num, expr_param
 from software_defined_matter.io import load_schema, validate
 from software_defined_matter.model import LATEST_SCHEMA_VERSION
@@ -27,15 +33,24 @@ def _document(depth: int = 8) -> dict:
     return doc
 
 
-def test_nested_expression_validation_matches_standard_validator() -> None:
+def _reference_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Send every document down the reference path, as an install without jsonschema-rs would."""
+    monkeypatch.setattr(sdm_io, "_compiled_schema", lambda version: None)
+
+
+def test_nested_expression_validation_matches_standard_validator(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _reference_path(monkeypatch)
     doc = _document()
     validate(doc)
     jsonschema.validate(doc, load_schema(doc["schema_version"]))
 
 
 def test_deep_expression_validation_does_not_repeat_reference_checks_exponentially(
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _reference_path(monkeypatch)
     reference = jsonschema.Draft202012Validator.VALIDATORS["$ref"]
     calls = 0
 
@@ -55,7 +70,10 @@ def test_deep_expression_validation_does_not_repeat_reference_checks_exponential
     validate(_document(depth=20))
 
 
-def test_validation_rechecks_a_mutated_document_and_preserves_error_path() -> None:
+def test_validation_rechecks_a_mutated_document_and_preserves_error_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _reference_path(monkeypatch)
     doc = _document()
     validate(doc)
     doc["materials"][0]["sdf_tree"]["params"]["r"] = {"$ref": 17}
@@ -67,7 +85,10 @@ def test_validation_rechecks_a_mutated_document_and_preserves_error_path() -> No
     assert actual.value.message == expected.value.message
 
 
-def test_one_valid_region_does_not_mask_an_invalid_region() -> None:
+def test_one_valid_region_does_not_mask_an_invalid_region(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _reference_path(monkeypatch)
     doc = _document()
     second = copy.deepcopy(doc["materials"][0])
     second["material_id"] = 2
