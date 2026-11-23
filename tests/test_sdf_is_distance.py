@@ -1324,3 +1324,15 @@ def test_every_node_kind_is_audited():
     covered = {k for _, _, cover in OP_CASES.values() for k in cover}
     missing = sorted(kinds - covered - set(UNCOMPILED_KINDS))
     assert not missing, f"Node kinds with no case in OP_CASES: {missing}"
+
+
+def test_primitive_exactness_declarations_respect_distance_audit_exemptions():
+    """A known projection failure or value jump cannot be declared exact."""
+    from software_defined_matter.sdf.exactness import EXACT, PRIMITIVE_EXACTNESS, UNKNOWN
+
+    for name, (sides, _) in KNOWN_NOT_DISTANCES.items():
+        for side in sides:
+            assert getattr(PRIMITIVE_EXACTNESS[name], side) != EXACT, (name, side)
+    for name in KNOWN_VALUE_JUMPS:
+        assert PRIMITIVE_EXACTNESS[name].outside == UNKNOWN
+        assert PRIMITIVE_EXACTNESS[name].inside == UNKNOWN

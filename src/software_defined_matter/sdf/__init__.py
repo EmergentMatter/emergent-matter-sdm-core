@@ -13,6 +13,7 @@ from software_defined_matter.sdf.compile import (
     make_sdf_closure,
     make_sdf_closure_with_binding,
 )
+from software_defined_matter.sdf.exactness import infer_sdf_exactness
 
 __all__ = [
     "BBoxInferenceError",
@@ -21,6 +22,7 @@ __all__ = [
     "UnsupportedSDFNodeError",
     "infer_material_bbox",
     "infer_sdf_bbox",
+    "infer_sdf_exactness",
     "make_sdf_closure",
     "make_sdf_closure_with_binding",
     "sdf_ops",

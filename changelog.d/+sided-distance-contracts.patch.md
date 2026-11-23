@@ -1,0 +1,1 @@
+Infer separate interior and exterior distance contracts over parameter bounds or current values. Classify primitives and composite geometry using sufficient domain, disjointness, and containment proofs without changing JAX or GLSL evaluation.
