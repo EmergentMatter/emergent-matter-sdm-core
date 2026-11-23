@@ -1,0 +1,1 @@
+Reject negative powers over base intervals containing zero before they can produce unsafe finite geometry bounds. Preserve reciprocal bounds away from zero and return the constant interval for exponent zero.

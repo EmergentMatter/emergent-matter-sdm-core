@@ -409,13 +409,22 @@ def _infer_primitive_bbox(node: dict[str, Any], intervals: dict[str, Interval]) 
         return _bbox_center_half((0.0, 0.0, 0.0), (r1 + r2, ext, r2))
     if kind == "cone":
         h = _scalar_abs_max(kw["h"], intervals)
-        c = _vec_abs_max(kw["c"], 2, intervals)
-        tan_term = c[0] / max(c[1], 1e-8)
-        r = abs(h * tan_term)
+        c = _vec_intervals(kw["c"], 2, intervals)
+        # The widest cone can occur at the smallest denominator. Interval
+        # division also rejects a range containing zero; a numeric floor
+        # would invent a finite bound for a singular or much wider cone.
+        ratio = _interval_binop("/", c[0], c[1])
+        r = h * max(abs(v) for v in ratio)
+        if not (math.isfinite(r) and math.isfinite(h)):
+            raise UnsupportedSDFNodeError("Cone dimensions do not establish a finite bounding box")
         return _bbox_center_half((0.0, 0.0, 0.0), (r, r, h))
     if kind == "hex_prism":
-        radius, half_h = _vec_abs_max(kw["h"], 2, intervals)
-        return _bbox_center_half((0.0, 0.0, 0.0), (radius, radius, half_h))
+        apothem, half_h = _vec_abs_max(kw["h"], 2, intervals)
+        # h[0] is the distance to the horizontal faces, not to the X tips.
+        # Enclose those vertices before this box can prove CSG disjointness
+        # or cutter containment.
+        half_x = 2.0 * apothem / math.sqrt(3.0)
+        return _bbox_center_half((0.0, 0.0, 0.0), (half_x, apothem, half_h))
     if kind == "tri_prism":
         radius, half_h = _vec_abs_max(kw["h"], 2, intervals)
         return _bbox_center_half((0.0, 0.0, 0.0), (radius, radius, half_h))
@@ -559,13 +568,14 @@ def _infer_transform_bbox(node: dict[str, Any], intervals: dict[str, Interval]) 
         )
     if tf == "scale":
         s_lo, s_hi = _scalar_interval(params["s"], intervals)
-        if s_lo <= 0.0 <= s_hi:
-            raise UnsupportedSDFNodeError(
-                "Scale interval spans zero; unsupported for MVP bbox inference"
-            )
-        s_abs = max(abs(s_lo), abs(s_hi))
+        # Negative factors reverse the field's sign in the evaluator, so
+        # scaling a finite child box cannot bound the resulting solid.
+        if not (0.0 < s_lo <= s_hi < math.inf):
+            raise UnsupportedSDFNodeError("Scale factors must stay positive and finite")
+        # An offset child moves toward the origin at smaller scales. The
+        # largest factor alone only encloses boxes containing the origin.
         corners = _bbox_corners(child_bbox)
-        scaled = [_vec3(s_abs * c for c in corner) for corner in corners]
+        scaled = [_vec3(s * c for c in corner) for s in (s_lo, s_hi) for corner in corners]
         return _points_to_bbox(scaled)
     if tf == "scale_axis":
         # Each axis scales independently, across the whole bounds of its
@@ -992,8 +1002,15 @@ def _interval_binop(op: str, lhs: Interval, rhs: Interval) -> Interval:
             raise UnsupportedExprError("pow with non-constant exponent is unsupported")
         p = b0
         if float(p).is_integer():
+            # Endpoint values cannot bound a reciprocal across its pole.
+            # Reject before evaluation so zero endpoints use the same
+            # inference error as a singularity inside the interval.
+            if p < 0 and a0 <= 0.0 <= a1:
+                raise UnsupportedExprError(
+                    "Negative power over interval spanning zero is unsupported"
+                )
             vals = (a0**p, a1**p)
-            if int(p) % 2 == 0 and a0 <= 0.0 <= a1:
+            if p > 0 and int(p) % 2 == 0 and a0 <= 0.0 <= a1:
                 return (0.0, max(vals))
             return (min(vals), max(vals))
         raise UnsupportedExprError("pow with non-integer exponent is unsupported")
