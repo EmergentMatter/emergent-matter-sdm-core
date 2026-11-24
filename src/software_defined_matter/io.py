@@ -142,7 +142,8 @@ def validate(source: PathLike | dict[str, Any] | Part | Assembly) -> None:
     Runs the JSON Schema check and the semantic checks in
     :mod:`software_defined_matter.sdf.validate` (which catch e.g. a ``plane``
     used as a material root, or a primitive kind/kwarg that no JSON Schema
-    version constrains).
+    version constrains). After structural and semantic checks pass, warns
+    when modifiers or blends lack the required input distance contracts.
 
     Raises:
         jsonschema.ValidationError: If the document does not conform to the
@@ -193,6 +194,11 @@ def validate(source: PathLike | dict[str, Any] | Part | Assembly) -> None:
     validate_kinematics(doc)
     validate_param_refs(doc)
     validate_param_relations(doc)
+    from software_defined_matter.sdf.validate import warn_distance_consumers
+
+    part = source if isinstance(source, Part) else Part.from_dict(doc)
+    for i, region in enumerate(part.materials):
+        warn_distance_consumers(region.sdf_tree, part, path=f"materials[{i}].sdf_tree")
     _warn_if_version_mismatch(doc)
 
 

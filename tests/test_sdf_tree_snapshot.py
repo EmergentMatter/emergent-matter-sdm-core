@@ -95,7 +95,7 @@ def test_snapshot_preserves_live_free_vectors_and_float32_jitted_gradients(entry
         assert fn.distance_exactness.outside == UNKNOWN
 
 
-def test_recompilation_rechecks_shell_contracts_after_tree_edits():
+def test_recompilation_rechecks_shell_contracts_and_diagnostics_after_tree_edits():
     child = sdf_primitive("round_box", b=[1, 1, 1], r=0.5)
     tree = sdf_modifier("onion", child, thickness=0.1)
     part = Part(name="shell")
@@ -103,7 +103,8 @@ def test_recompilation_rechecks_shell_contracts_after_tree_edits():
         warnings.simplefilter("error", DistanceAccuracyWarning)
         original = make_sdf_closure(tree, part)
     child["params"]["r"] = 2
-    changed = make_sdf_closure(tree, part)
+    with pytest.warns(DistanceAccuracyWarning, match="onion reads a side"):
+        changed = make_sdf_closure(tree, part)
     point = jnp.array([3.0, 0, 0])
     assert float(original(point)) == pytest.approx(1.9, abs=1e-6)
     assert original.distance_exactness.outside == EXACT

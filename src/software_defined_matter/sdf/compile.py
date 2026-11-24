@@ -131,7 +131,7 @@ def make_sdf_closure(
 ) -> SDFEvaluator:
     """Return a ``(points, free_vec) -> distance`` closure for ``tree``.
 
-    Compilation and distance inference share a private deep
+    Compilation, diagnostics and distance inference share a private deep
     snapshot of ``tree``. Later edits to the source dictionaries or nested
     parameter lists do not change the evaluator; recompile to apply them.
     Explicit free-parameter vectors remain live inputs.
@@ -140,7 +140,9 @@ def make_sdf_closure(
     not the Part's declared bounds. A closure accepting free parameters carries
     UNKNOWN because its ``free_vec`` argument is unrestricted, including under
     JIT. Use ``infer_sdf_exactness`` separately for a conditional bounds proof.
-    Contracts describe field values, not gradient smoothness.
+    Contracts describe field values, not gradient smoothness. Compilation
+    warns once per modifier or blend whose input distance requirements are
+    unproven; calling the evaluator does not repeat those diagnostics.
 
     Args:
         tree: SDF expression tree (as produced by the builders in
@@ -161,6 +163,10 @@ def make_sdf_closure(
         b_smooth_csg=b_smooth_csg,
         d_smooth_k=d_smooth_k,
     )
+
+    from software_defined_matter.sdf.validate import warn_distance_consumers
+
+    warn_distance_consumers(tree, binding=binding, b_smooth_csg=b_smooth_csg)
 
     def evaluate_sdf(points: jnp.ndarray, free_vec: jnp.ndarray | None = None) -> jnp.ndarray:
         if free_vec is None:
@@ -210,6 +216,10 @@ def make_sdf_closure_with_binding(
         b_smooth_csg=b_smooth_csg,
         d_smooth_k=d_smooth_k,
     )
+
+    from software_defined_matter.sdf.validate import warn_distance_consumers
+
+    warn_distance_consumers(tree, binding=binding, b_smooth_csg=b_smooth_csg)
 
     def evaluate_sdf(points: jnp.ndarray, free_vec: jnp.ndarray | None = None) -> jnp.ndarray:
         if free_vec is None:

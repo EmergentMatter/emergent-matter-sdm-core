@@ -1,1 +1,1 @@
-Infer distance contracts for the actual `extrusion` operation. Preserve justified child-side exactness and lower bounds only over positive finite half-height ranges.
+Infer distance contracts for the actual `extrusion` operation. Preserve justified child-side exactness and lower bounds only over positive finite half-height ranges. Warn when extrusion inputs lack the distance contracts required by modifiers and length metrics.

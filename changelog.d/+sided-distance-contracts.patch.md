@@ -1,1 +1,1 @@
-Infer separate interior and exterior distance contracts over parameter bounds or current values. Classify primitives and composite geometry using sufficient domain, disjointness, and containment proofs without changing JAX or GLSL evaluation.
+Infer separate interior and exterior distance contracts, diagnose length-valued consumers, and distinguish source exactness from interpolated bake provenance without changing JAX or GLSL evaluation.

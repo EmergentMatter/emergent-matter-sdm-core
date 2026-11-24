@@ -12,6 +12,7 @@ from software_defined_matter.sdf.compile import make_sdf_closure
 from software_defined_matter.sdf.exactness import (
     EXACT,
     LOWER_BOUND,
+    DistanceAccuracyWarning,
     infer_sdf_exactness,
 )
 
@@ -31,25 +32,22 @@ def test_overlapping_hex_prisms_do_not_receive_an_exact_interior_contract():
     depth = 2 - math.sqrt(3) * 1.05
     assert float(fn(jnp.array([1.05, 0, 0]))) == pytest.approx(-depth / 2, abs=2e-6)
     assert float(fn(jnp.array([1.05, depth, 0]))) == pytest.approx(0, abs=2e-6)
-    assert infer_sdf_exactness(tree, part).outside == EXACT
-    assert infer_sdf_exactness(tree, part).inside == LOWER_BOUND
+    assert fn.distance_exactness.outside == EXACT
+    assert fn.distance_exactness.inside == LOWER_BOUND
     assert infer_sdf_exactness(tree, part).inside == LOWER_BOUND
 
 
-def test_hex_union_shell_does_not_claim_exact_exterior_distance():
+def test_hex_union_shell_warns_and_does_not_claim_exact_exterior_distance():
     tree = sdf_modifier("onion", _hex_union(), thickness=0.05)
     part = Part(name="hex-shell")
-    fn = make_sdf_closure(tree, part)
+    with pytest.warns(DistanceAccuracyWarning, match="onion reads a side"):
+        fn = make_sdf_closure(tree, part)
     # The shell's inner edge is reached when the union field is -0.05.
     # Its slope along this seam is 1/2, so a 0.05 field offset moves it 0.1.
     distance = 2 - math.sqrt(3) * 1.05 - 0.1
     assert float(fn(jnp.array([1.05, 0, 0]))) == pytest.approx(distance / 2, abs=2e-6)
     assert float(fn(jnp.array([1.05, distance, 0]))) == pytest.approx(0, abs=2e-6)
-    assert (
-        infer_sdf_exactness(tree, part).outside
-        == infer_sdf_exactness(tree, part).inside
-        == LOWER_BOUND
-    )
+    assert fn.distance_exactness.outside == fn.distance_exactness.inside == LOWER_BOUND
 
 
 def test_hex_union_disjointness_must_hold_over_the_whole_parameter_range():
@@ -61,7 +59,7 @@ def test_hex_union_disjointness_must_hold_over_the_whole_parameter_range():
 
 def test_genuinely_disjoint_hex_prisms_keep_the_exact_union_contract():
     tree = _hex_union(separation=3)
-    assert infer_sdf_exactness(tree, Part(name="disjoint-hexes")).is_exact
+    assert make_sdf_closure(tree, Part(name="disjoint-hexes")).distance_exactness.is_exact
 
 
 def test_hex_prism_tips_prevent_a_false_cutter_containment_proof():

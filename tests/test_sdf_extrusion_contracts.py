@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import warnings
 
 import jax
 import jax.numpy as jnp
@@ -13,15 +14,18 @@ from software_defined_matter import (
     Param,
     Part,
     sdf_2d_to_3d,
+    sdf_modifier,
     sdf_op,
     sdf_primitive,
     sdf_transform,
 )
+from software_defined_matter.dsl.expr import compile_expr
 from software_defined_matter.sdf.compile import make_sdf_closure
 from software_defined_matter.sdf.exactness import (
     EXACT,
     LOWER_BOUND,
     UNKNOWN,
+    DistanceAccuracyWarning,
     infer_sdf_exactness,
 )
 
@@ -111,4 +115,26 @@ def test_exact_extrusion_matches_cylinder_distances_at_height_endpoints_under_ji
         # Side, cap, and corner: the corner is a 3-4-5 distance triangle.
         assert fn(points, jnp.array([d_h], dtype=jnp.float32)).tolist() == pytest.approx(
             [-0.5, 0.5, 0.5], abs=1e-6
+        )
+
+
+def test_exact_extrusions_do_not_trigger_modifier_or_length_metric_warnings():
+    tree = sdf_2d_to_3d("extrusion", _profile(), h=2)
+    part = Part(name="fixed-height", materials=[MaterialRegion(1, "body", tree)])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DistanceAccuracyWarning)
+        make_sdf_closure(sdf_modifier("onion", tree, thickness=0.1), part)
+        compile_expr(
+            {"type": "metric", "name": "min_value"}, part, sdf_closure=make_sdf_closure(tree, part)
+        )
+
+
+def test_inexact_extrusion_interiors_still_trigger_length_consumer_warnings():
+    tree = sdf_2d_to_3d("extrusion", _profile("union"), h=2)
+    part = Part(name="union-height", materials=[MaterialRegion(1, "body", tree)])
+    with pytest.warns(DistanceAccuracyWarning, match="onion reads a side"):
+        make_sdf_closure(sdf_modifier("onion", tree, thickness=0.1), part)
+    with pytest.warns(DistanceAccuracyWarning, match="not geometric lengths"):
+        compile_expr(
+            {"type": "metric", "name": "min_value"}, part, sdf_closure=make_sdf_closure(tree, part)
         )

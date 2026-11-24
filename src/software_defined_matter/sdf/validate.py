@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from software_defined_matter import wire
 
 if TYPE_CHECKING:
+    from software_defined_matter.dsl.resolve import ParamBinding
     from software_defined_matter.model import Part
 
 
@@ -52,6 +53,7 @@ def validate_part_material_trees(part: Part) -> None:
     """Validate every :class:`MaterialRegion` on ``part`` (no-op if none)."""
     for region in part.materials:
         validate_material_tree(region.sdf_tree, region_name=region.name)
+        warn_distance_consumers(region.sdf_tree, part)
 
 
 def validate_material_tree(tree: dict[str, Any], *, region_name: str = "") -> None:
@@ -717,4 +719,124 @@ __all__ = [
     "validate_document_semantics",
     "validate_material_tree",
     "validate_part_material_trees",
+    "warn_distance_consumers",
 ]
+
+
+def warn_distance_consumers(
+    tree: dict[str, Any],
+    part: Part | None = None,
+    *,
+    binding: ParamBinding | None = None,
+    b_smooth_csg: bool | None = None,
+    path: str = "sdf_tree",
+) -> None:
+    """Warn about length-valued modifiers and blends without an exact input.
+
+    Loading checks both current values and the declared parameter envelope.
+    Compilation supplies its binding instead: fixed values are captured and
+    free vectors are unrestricted. Smoothing overrides match the compiler.
+    This runs once at the entry point, never during evaluator calls or JAX
+    tracing. Intentional field-value operations remain supported; paths identify
+    the consumer whose geometric length interpretation is unproven.
+    """
+    import warnings
+
+    from software_defined_matter.dsl.resolve import ParamBinding
+    from software_defined_matter.sdf.bbox import BBoxInferenceError, _scalar_interval
+    from software_defined_matter.sdf.exactness import (
+        EXACT,
+        DistanceAccuracyWarning,
+        DistanceExactness,
+        _common,
+        _infer_binding_exactness,
+        _parameter_intervals,
+        infer_sdf_exactness,
+    )
+
+    if binding is not None:
+        intervals = (
+            {name: (v, v) for name, v in binding.fixed.items()}
+            if isinstance(binding, ParamBinding)
+            else {}
+        )
+        smooth = bool(b_smooth_csg)
+    else:
+        if part is None:
+            raise ValueError("distance diagnostics require a Part or parameter binding")
+        intervals = _parameter_intervals(part, "bounds")
+        for name, (lo, hi) in _parameter_intervals(part, "values").items():
+            if name in intervals:
+                low, high = intervals[name]
+                intervals[name] = (min(low, lo), max(high, hi))
+        smooth = (
+            bool(part.metadata.get("smooth_csg", False)) if b_smooth_csg is None else b_smooth_csg
+        )
+
+    def contract_for(child: dict[str, Any]) -> DistanceExactness:
+        if binding is not None:
+            return _infer_binding_exactness(child, binding, b_smooth_csg=smooth)
+        assert part is not None
+        contracts = [
+            infer_sdf_exactness(child, part, mode=mode, b_smooth_csg=smooth)
+            for mode in ("bounds", "values")
+        ]
+        return DistanceExactness(
+            _common([c.outside for c in contracts]),
+            _common([c.inside for c in contracts]),
+            "current values and parameter envelope",
+        )
+
+    def walk(node: Any, path: str) -> None:
+        if not isinstance(node, dict):
+            return
+        modifier = node.get("modifier")
+        if modifier in ("round", "onion"):
+            contract = contract_for(node["child"])
+            required = [contract.outside, contract.inside]
+            if modifier == "round":
+                try:
+                    lo, hi = _scalar_interval(node["params"]["r"], intervals)
+                    if lo == hi == 0:
+                        required = []
+                    elif lo >= 0:
+                        required = [contract.outside]
+                    elif hi <= 0:
+                        required = [contract.inside]
+                except (BBoxInferenceError, KeyError, TypeError, ValueError):
+                    pass  # An unknown offset direction needs both sides.
+            if any(side != EXACT for side in required):
+                warnings.warn(
+                    f"{path}: {modifier} reads a side without an exact distance contract; "
+                    "its parameter is not a guaranteed geometric length.",
+                    DistanceAccuracyWarning,
+                    stacklevel=3,
+                )
+        children = node.get("children") or []
+        op = node.get("op", "")
+        blended = (
+            op.startswith("smooth_")
+            or op in ("softmin_many", "softmin_chunked")
+            or (smooth and op in ("union", "intersect", "subtract"))
+        )
+        blend_name = op
+        blend_inputs = children
+        if smooth and node.get("type") == "transform" and node.get("transform") == "mirror":
+            # The compiler smooth-unions the child with its reflected copy.
+            # Reflection preserves its contract, so both inputs need this proof.
+            blended = True
+            blend_name = "mirror"
+            blend_inputs = [node["child"]]
+        if blended and any(not contract_for(c).is_exact for c in blend_inputs):
+            warnings.warn(
+                f"{path}: {blend_name} blends non-exact fields; smoothing is a field-value scale, "
+                "not a guaranteed geometric radius.",
+                DistanceAccuracyWarning,
+                stacklevel=3,
+            )
+        if "child" in node:
+            walk(node["child"], f"{path}.child")
+        for i, child in enumerate(children):
+            walk(child, f"{path}.children[{i}]")
+
+    walk(tree, path)

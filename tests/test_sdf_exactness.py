@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import warnings
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -17,6 +19,7 @@ from software_defined_matter import (
     sdf_transform,
     wire,
 )
+from software_defined_matter.dsl.expr import compile_expr
 from software_defined_matter.sdf.bake import bake_raster_field
 from software_defined_matter.sdf.compile import make_sdf_closure
 from software_defined_matter.sdf.exactness import (
@@ -24,8 +27,10 @@ from software_defined_matter.sdf.exactness import (
     LOWER_BOUND,
     PRIMITIVE_EXACTNESS,
     UNKNOWN,
+    DistanceAccuracyWarning,
     infer_sdf_exactness,
 )
+from software_defined_matter.sdf.validate import warn_distance_consumers
 
 
 def _sphere(x=0.0, r=1.0):
@@ -144,60 +149,6 @@ def test_plane_normal_that_can_vanish_is_unknown():
     assert _sides(sdf_primitive("plane", n=[0, 0, 3], h=1)) == (EXACT, EXACT)
 
 
-def test_a_cutter_proven_inside_a_solid_preserves_both_sides():
-    tree = sdf_op("subtract", [_sphere(r=4), _sphere(r=1)])
-    assert _sides(tree) == (EXACT, EXACT)
-
-
-def test_overlapping_internal_cutters_do_not_preserve_the_outside_distance():
-    tree = sdf_op("subtract", [_sphere(r=4), _sphere(-0.5), _sphere(0.5)])
-    assert _sides(tree) == (LOWER_BOUND, EXACT)
-
-
-def test_erosion_preserves_only_the_inside_contract():
-    tree = sdf_modifier("round", sdf_primitive("box", b=[2, 2, 2]), r=-1)
-    assert _sides(tree) == (LOWER_BOUND, EXACT)
-
-
-def test_unverified_query_maps_do_not_inherit_exactness():
-    tree = sdf_transform("rotate_matrix", _sphere(), R=[[2, 0, 0], [0, 1, 0], [0, 0, 1]])
-    assert _sides(tree) == (UNKNOWN, UNKNOWN)
-
-
-@pytest.mark.parametrize("cached", [None, 100], ids=["uncached", "stale-cache"])
-def test_derived_parameters_do_not_supply_a_false_disjointness_proof(cached):
-    tree = sdf_op("union", [_sphere(), _sphere({"$ref": "offset"})])
-    part = _part(
-        tree,
-        params={"offset": Param("offset", cached, expr={"type": "num", "value": 1})},
-    )
-    assert _sides(tree, part) == (UNKNOWN, UNKNOWN)
-    assert make_sdf_closure(tree, part).distance_exactness.inside == UNKNOWN
-    assert part.params["offset"].value is cached
-
-
-def test_spindle_torus_is_not_exact_inside_even_though_its_boundary_is_correct():
-    tree = sdf_primitive("torus", t=[1, 2])
-    assert _sides(tree) == (EXACT, LOWER_BOUND)
-    fn = make_sdf_closure(tree, _part(tree))
-    assert float(fn(jnp.zeros(3))) == pytest.approx(-1, abs=1e-6)
-    # The nearest exposed boundary is on the axis at z = sqrt(minor^2-major^2).
-    assert float(fn(jnp.array([0, 0, np.sqrt(3)]))) == pytest.approx(0, abs=1e-6)
-    assert _sides(sdf_primitive("torus", t=[3, 1])) == (EXACT, EXACT)
-
-
-def test_capped_arc_tubes_do_not_claim_unproven_interior_reach():
-    tree = sdf_primitive("capped_torus", sc=[0.01, -1], ra=1, rb=0.2)
-    assert _sides(tree) == (EXACT, LOWER_BOUND)
-
-
-def test_tube_radius_parameter_bounds_must_preserve_the_hole():
-    tree = sdf_primitive("torus", t=[1, {"$ref": "r"}])
-    part = _part(tree, params={"r": Param("r", 0.2, free=True, bounds=(0.1, 2))})
-    assert _sides(tree, part) == (EXACT, LOWER_BOUND)
-    assert _sides(tree, part, mode="values") == (EXACT, EXACT)
-
-
 def test_contract_attachment_does_not_change_jitted_parameter_gradients():
     tree = sdf_primitive("sphere", r={"$ref": "r"})
     part = _part(tree, params={"r": Param(name="r", value=1, bounds=(0.5, 2), free=True)})
@@ -226,3 +177,100 @@ def test_opaque_bake_callable_cannot_inherit_claimed_provenance():
         provenance={"source_distance_exactness": {"outside": "exact"}},
     )
     assert node["params"]["provenance"]["source_distance_exactness"]["outside"] == "unknown"
+
+
+def test_modifier_diagnostic_identifies_the_consumer_path():
+    tree = sdf_modifier("onion", sdf_op("union", [_sphere(-0.5), _sphere(0.5)]), thickness=0.1)
+    with pytest.warns(DistanceAccuracyWarning, match="sdf_tree: onion"):
+        warn_distance_consumers(tree, _part(tree))
+
+
+@pytest.mark.parametrize("name", ["min_value", "max_value"], ids=["minimum", "maximum"])
+def test_length_metrics_warn_at_compilation_for_nonexact_fields(name):
+    tree = sdf_op("union", [_sphere(-0.5), _sphere(0.5)])
+    with pytest.warns(DistanceAccuracyWarning, match="not geometric lengths"):
+        compile_expr(
+            {"type": "metric", "name": name},
+            _part(tree),
+            sdf_closure=make_sdf_closure(tree, _part(tree)),
+        )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        compile_expr({"type": "metric", "name": name}, _part())
+
+
+def test_a_cutter_proven_inside_a_solid_preserves_both_sides():
+    tree = sdf_op("subtract", [_sphere(r=4), _sphere(r=1)])
+    assert _sides(tree) == (EXACT, EXACT)
+
+
+def test_overlapping_internal_cutters_do_not_preserve_the_outside_distance():
+    tree = sdf_op("subtract", [_sphere(r=4), _sphere(-0.5), _sphere(0.5)])
+    assert _sides(tree) == (LOWER_BOUND, EXACT)
+
+
+def test_erosion_preserves_only_the_inside_contract():
+    tree = sdf_modifier("round", sdf_primitive("box", b=[2, 2, 2]), r=-1)
+    assert _sides(tree) == (LOWER_BOUND, EXACT)
+
+
+def test_unverified_query_maps_do_not_inherit_exactness():
+    tree = sdf_transform("rotate_matrix", _sphere(), R=[[2, 0, 0], [0, 1, 0], [0, 0, 1]])
+    assert _sides(tree) == (UNKNOWN, UNKNOWN)
+
+
+def test_opaque_metric_callable_cannot_inherit_the_parts_exactness():
+    with pytest.warns(DistanceAccuracyWarning, match="not geometric lengths"):
+        compile_expr(
+            {"type": "metric", "name": "min_value"},
+            _part(),
+            sdf_closure=lambda p, free: jnp.zeros(p.shape[:-1]),
+        )
+
+
+@pytest.mark.parametrize("cached", [None, 100], ids=["uncached", "stale-cache"])
+def test_derived_parameters_do_not_supply_a_false_disjointness_proof(cached):
+    tree = sdf_op("union", [_sphere(), _sphere({"$ref": "offset"})])
+    part = _part(
+        tree,
+        params={"offset": Param("offset", cached, expr={"type": "num", "value": 1})},
+    )
+    assert _sides(tree, part) == (UNKNOWN, UNKNOWN)
+    assert make_sdf_closure(tree, part).distance_exactness.inside == UNKNOWN
+    assert part.params["offset"].value is cached
+
+
+def test_outward_round_diagnostic_only_requires_the_childs_outside():
+    tree = sdf_modifier("round", sdf_op("union", [_sphere(-0.5), _sphere(0.5)]), r=0.1)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        warn_distance_consumers(tree, _part(tree))
+
+
+def test_zero_round_does_not_warn_about_an_unchanged_field():
+    tree = sdf_modifier("round", sdf_op("union", [_sphere(-0.5), _sphere(0.5)]), r=0)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        warn_distance_consumers(tree, _part(tree))
+
+
+def test_spindle_torus_is_not_exact_inside_even_though_its_boundary_is_correct():
+    tree = sdf_primitive("torus", t=[1, 2])
+    assert _sides(tree) == (EXACT, LOWER_BOUND)
+    fn = make_sdf_closure(tree, _part(tree))
+    assert float(fn(jnp.zeros(3))) == pytest.approx(-1, abs=1e-6)
+    # The nearest exposed boundary is on the axis at z = sqrt(minor^2-major^2).
+    assert float(fn(jnp.array([0, 0, np.sqrt(3)]))) == pytest.approx(0, abs=1e-6)
+    assert _sides(sdf_primitive("torus", t=[3, 1])) == (EXACT, EXACT)
+
+
+def test_capped_arc_tubes_do_not_claim_unproven_interior_reach():
+    tree = sdf_primitive("capped_torus", sc=[0.01, -1], ra=1, rb=0.2)
+    assert _sides(tree) == (EXACT, LOWER_BOUND)
+
+
+def test_tube_radius_parameter_bounds_must_preserve_the_hole():
+    tree = sdf_primitive("torus", t=[1, {"$ref": "r"}])
+    part = _part(tree, params={"r": Param("r", 0.2, free=True, bounds=(0.1, 2))})
+    assert _sides(tree, part) == (EXACT, LOWER_BOUND)
+    assert _sides(tree, part, mode="values") == (EXACT, EXACT)

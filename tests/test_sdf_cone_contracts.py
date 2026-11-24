@@ -12,8 +12,10 @@ from software_defined_matter.sdf.compile import make_sdf_closure
 from software_defined_matter.sdf.exactness import (
     EXACT,
     LOWER_BOUND,
+    DistanceAccuracyWarning,
     infer_sdf_exactness,
 )
+from software_defined_matter.sdf.validate import warn_distance_consumers
 
 
 def _cone_pair(separation=3):
@@ -39,10 +41,12 @@ def test_cones_that_overlap_within_the_angle_range_cannot_get_exact_union_interi
     assert float(fn(jnp.array([1.5, 0, -0.75]), free)) == pytest.approx(0, abs=2e-6)
 
 
-def test_shell_contracts_account_for_overlap_anywhere_in_the_angle_range():
+def test_shell_contracts_and_warnings_account_for_overlap_anywhere_in_the_angle_range():
     union, part = _cone_pair()
     shell = sdf_modifier("onion", union, thickness=0.02)
     assert infer_sdf_exactness(shell, part).outside == LOWER_BOUND
+    with pytest.warns(DistanceAccuracyWarning, match="onion reads a side"):
+        warn_distance_consumers(shell, part)
 
 
 def test_cones_disjoint_over_the_full_angle_range_keep_exact_union_contracts():

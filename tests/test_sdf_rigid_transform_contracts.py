@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import math
+import warnings
 
 import jax
 import jax.numpy as jnp
@@ -12,13 +14,16 @@ from software_defined_matter import (
     MaterialRegion,
     Param,
     Part,
+    load_part,
+    sdf_modifier,
     sdf_primitive,
     sdf_transform,
 )
-from software_defined_matter.dsl.expr import expr_binop, expr_num, expr_param
+from software_defined_matter.dsl.expr import compile_expr, expr_binop, expr_num, expr_param
 from software_defined_matter.sdf.compile import make_sdf_closure
 from software_defined_matter.sdf.exactness import (
     UNKNOWN,
+    DistanceAccuracyWarning,
     infer_sdf_exactness,
 )
 
@@ -62,12 +67,42 @@ def test_singular_transform_ranges_are_unknown_even_when_current_values_are_vali
 
 
 @pytest.mark.parametrize("transform", TRANSFORMS)
+def test_fixed_singular_transforms_warn_before_jit_and_do_not_claim_exactness(transform):
+    tree = _tree(transform, _inverse_square())
+    part = _part(tree, params={"x": Param("x", 0, free=False, unit="ratio")})
+    fn = make_sdf_closure(tree, part)
+    assert fn.distance_exactness.outside == fn.distance_exactness.inside == UNKNOWN
+    with pytest.warns(DistanceAccuracyWarning, match="onion reads a side"):
+        shell = make_sdf_closure(sdf_modifier("onion", tree, thickness=0.1), part)
+    # Diagnostics occur at compilation, not repeatedly inside a JAX trace.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DistanceAccuracyWarning)
+        value = jax.jit(shell)(jnp.array([1.0, 0.0, 0.0], dtype=jnp.float32))
+    assert not bool(jnp.isfinite(value))
+    with pytest.warns(DistanceAccuracyWarning, match="not geometric lengths"):
+        compile_expr({"type": "metric", "name": "min_value"}, part, sdf_closure=fn)
+
+
+@pytest.mark.parametrize("transform", TRANSFORMS)
+def test_loading_warns_when_a_rigid_parameter_range_crosses_a_singularity(tmp_path, transform):
+    tree = sdf_modifier("onion", _tree(transform, _inverse_square()), thickness=0.1)
+    part = _part(tree, params={"x": Param("x", 1, free=True, bounds=(-1, 1), unit="ratio")})
+    path = tmp_path / "singular.sdm"
+    path.write_text(json.dumps(part.to_dict()))
+    with pytest.warns(DistanceAccuracyWarning, match="onion reads a side"):
+        load_part(path)
+
+
+@pytest.mark.parametrize("transform", TRANSFORMS)
 def test_finite_rigid_ranges_and_fixed_values_preserve_exactness(transform):
     tree = _tree(transform, _inverse_square())
     part = _part(tree, params={"x": Param("x", 1, free=True, bounds=(0.5, 2), unit="ratio")})
     assert infer_sdf_exactness(tree, part).is_exact
     fixed = _part(tree, params={"x": Param("x", 1, free=False, unit="ratio")})
-    fn = make_sdf_closure(tree, fixed)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DistanceAccuracyWarning)
+        fn = make_sdf_closure(tree, fixed)
+        make_sdf_closure(sdf_modifier("onion", tree, thickness=0.1), fixed)
     assert fn.distance_exactness.is_exact
     point = jnp.array([2.0, 0.0, 0.0], dtype=jnp.float32)
     expected = 0 if transform == "translate" else 1
@@ -101,3 +136,5 @@ def test_composed_rigid_expressions_cannot_hide_a_nonfinite_operand(transform):
     tree = _tree(transform, angle)
     part = _part(tree)
     assert not infer_sdf_exactness(tree, part).is_exact
+    with pytest.warns(DistanceAccuracyWarning, match="onion reads a side"):
+        make_sdf_closure(sdf_modifier("onion", tree, thickness=0.1), part)

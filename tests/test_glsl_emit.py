@@ -33,6 +33,7 @@ from software_defined_matter import (
 )
 from software_defined_matter.glsl import GLSLEmission, emit_glsl, load_lib_glsl
 from software_defined_matter.model import SDFTree
+from software_defined_matter.sdf.exactness import DistanceAccuracyWarning
 from software_defined_matter.sdf.validate import validate_document_semantics
 
 # ---------------------------------------------------------------------------
@@ -1201,10 +1202,11 @@ def test_a_modifier_child_still_partitions_the_root():
     )
     part = _wrap(tree)
     pts = jnp.asarray(np.random.default_rng(1).uniform(-6.0, 6.0, size=(3000, 3)))
-    root = make_sdf_closure(tree, part)(pts)
-    per_component = jnp.stack(
-        [make_sdf_closure(node, part)(pts) for node, _ in _expand_components(tree, [])]
-    )
+    with pytest.warns(DistanceAccuracyWarning, match="onion reads a side"):
+        root = make_sdf_closure(tree, part)(pts)
+        per_component = jnp.stack(
+            [make_sdf_closure(node, part)(pts) for node, _ in _expand_components(tree, [])]
+        )
     assert float(jnp.max(jnp.abs(jnp.min(per_component, axis=0) - root))) == 0.0
 
 

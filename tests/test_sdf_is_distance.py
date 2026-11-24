@@ -79,6 +79,7 @@ from software_defined_matter import (
 )
 from software_defined_matter.sdf import sdf_shapes
 from software_defined_matter.sdf.compile import _PRIMITIVES, make_sdf_closure
+from software_defined_matter.sdf.exactness import DistanceAccuracyWarning
 from software_defined_matter.sdf.raster import decode_raster_values
 from tests.conftest import PRIMITIVES, PRIMITIVES_2D, _sc
 
@@ -1139,7 +1140,11 @@ OP_KNOWN_NONFINITE: dict[str, str] = {}
 def _op_scalar(case_id):
     tree = OP_CASES[case_id][0]
     part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)])
-    closure = make_sdf_closure(tree, part)
+    if case_id in ("round-intersect", "onion-ellipsoid"):
+        with pytest.warns(DistanceAccuracyWarning, match="reads a side"):
+            closure = make_sdf_closure(tree, part)
+    else:
+        closure = make_sdf_closure(tree, part)
     free = jnp.asarray(part.param_vector())
 
     def scalar(x):
