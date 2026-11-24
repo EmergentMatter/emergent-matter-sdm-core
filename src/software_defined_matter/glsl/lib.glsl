@@ -554,10 +554,9 @@ float sdf_capped_cone(vec3 p, float h, float r1, float r2) {
     return s * sqrt(min(dot(ca, ca), dot(cb, cb)));
 }
 
-float sdf_solid_angle(vec3 p, vec2 c, float ra) {
-    // c = [sin, cos] of the half-angle from +Z; only its direction counts.
-    // Guarded as in sdf_capped_torus. Mirrors sdf_shapes.solid_angle.
-    vec2 u = c / max(length(c), 1e-30);
+float sdf_solid_angle(vec3 p, float theta, float ra) {
+    // Scalar half-angle in radians, matching sdf_shapes.solid_angle.
+    vec2 u = vec2(sin(theta), cos(theta));
     vec2 q = vec2(length(p.xy), p.z);
     float l = length(q) - ra;
     float m = length(q - u * clamp(dot(q, u), 0.0, ra));

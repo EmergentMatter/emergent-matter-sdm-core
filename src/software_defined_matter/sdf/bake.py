@@ -60,7 +60,11 @@ def bake_raster_field(
         Wire dtype (``"f32le"`` default; ``"f16le"`` halves the payload).
     provenance : dict | None
         Free-form generator notes merged into ``params["provenance"]``
-        (the content hash and bake settings are always stamped).
+        (the content hash and bake settings are always stamped). Source
+        distance contracts are read from ``fn.distance_exactness`` when
+        available; opaque callables are unknown. The interpolant is always
+        recorded separately as unknown. Caller-supplied values for these
+        contract entries are overwritten, not treated as proof.
 
     Returns the complete node dict::
 
@@ -153,6 +157,16 @@ def bake_raster_field(
 
     origin = tuple(float(v) for v in lo)
     prov: dict[str, Any] = dict(provenance or {})
+    from software_defined_matter.sdf.exactness import UNKNOWN, DistanceExactness
+
+    source_contract = getattr(fn, "distance_exactness", None)
+    if not isinstance(source_contract, DistanceExactness):
+        source_contract = DistanceExactness(UNKNOWN, UNKNOWN, "opaque source callable")
+    prov["source_distance_exactness"] = source_contract.as_dict()
+    # Interpolation and quantization do not preserve a source's exactness.
+    prov["distance_exactness"] = DistanceExactness(
+        UNKNOWN, UNKNOWN, "sampled and interpolated field"
+    ).as_dict()
     prov["content_hash"] = raster_content_hash(values, origin, (voxel,) * 3, dims)
     prov["bake"] = {
         "voxel": float(voxel),

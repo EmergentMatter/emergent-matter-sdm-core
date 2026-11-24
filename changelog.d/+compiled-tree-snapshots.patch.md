@@ -1,0 +1,1 @@
+Snapshot source SDF trees at both compiler entry points so evaluators, diagnostics and distance contracts use the same private geometry. Source edits require recompilation; explicit free-vector evaluation and parameter gradients remain live.

@@ -1,0 +1,1 @@
+Diagnose smooth mirror transforms as blends at validated loading and both SDF compilation entry points. Warn when the child lacks exact distances on either side, while respecting smoothing overrides and keeping diagnostics outside field evaluation.

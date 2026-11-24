@@ -1,0 +1,1 @@
+Require primitive parameter-domain proofs before assigning exact or conservative distance contracts, including rounding, cut-height, endpoint-separation, angle and outline conditions across parameter bounds. Downgrade reflex-sector interiors and unproven outlines conservatively. Withhold plane distance certificates for normals that may flush to zero in float32.

@@ -79,6 +79,7 @@ from software_defined_matter import (
 )
 from software_defined_matter.sdf import sdf_shapes
 from software_defined_matter.sdf.compile import _PRIMITIVES, make_sdf_closure
+from software_defined_matter.sdf.exactness import DistanceAccuracyWarning
 from software_defined_matter.sdf.raster import decode_raster_values
 from tests.conftest import PRIMITIVES, PRIMITIVES_2D, _sc
 
@@ -468,13 +469,13 @@ STRESS_VARIANTS.update(
             ({"inner_r": 1.0, "outer_r": 3.0, "half_angle": 2.5, "height": 2.0}, 5.0),
         ],
         # Angle vectors twice unit length, as an optimiser leaves them: the
-        # conftest angles (120 and 50 deg) scaled by 2. Before normalisation,
-        # capped_torus gave NaN here and solid_angle measured rate 3.0.
+        # conftest capped-torus angle (120 deg) scaled by 2.
         "capped_torus": [
             ({"sc": [1.7320508, -1.0], "ra": 7.0, "rb": 2.2}, 11.0),
         ],
+        # The aperture is a scalar angle, with unit direction derived internally.
         "solid_angle": [
-            ({"c": [1.5320889, 1.2855752], "ra": 9.0}, 12.0),
+            ({"theta": 0.8726646259971648, "ra": 9.0}, 12.0),
         ],
     }
 )
@@ -1139,7 +1140,11 @@ OP_KNOWN_NONFINITE: dict[str, str] = {}
 def _op_scalar(case_id):
     tree = OP_CASES[case_id][0]
     part = Part(name="t", materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)])
-    closure = make_sdf_closure(tree, part)
+    if case_id in ("round-intersect", "onion-ellipsoid"):
+        with pytest.warns(DistanceAccuracyWarning, match="reads a side"):
+            closure = make_sdf_closure(tree, part)
+    else:
+        closure = make_sdf_closure(tree, part)
     free = jnp.asarray(part.param_vector())
 
     def scalar(x):
@@ -1324,3 +1329,15 @@ def test_every_node_kind_is_audited():
     covered = {k for _, _, cover in OP_CASES.values() for k in cover}
     missing = sorted(kinds - covered - set(UNCOMPILED_KINDS))
     assert not missing, f"Node kinds with no case in OP_CASES: {missing}"
+
+
+def test_primitive_exactness_declarations_respect_distance_audit_exemptions():
+    """A known projection failure or value jump cannot be declared exact."""
+    from software_defined_matter.sdf.exactness import EXACT, PRIMITIVE_EXACTNESS, UNKNOWN
+
+    for name, (sides, _) in KNOWN_NOT_DISTANCES.items():
+        for side in sides:
+            assert getattr(PRIMITIVE_EXACTNESS[name], side) != EXACT, (name, side)
+    for name in KNOWN_VALUE_JUMPS:
+        assert PRIMITIVE_EXACTNESS[name].outside == UNKNOWN
+        assert PRIMITIVE_EXACTNESS[name].inside == UNKNOWN

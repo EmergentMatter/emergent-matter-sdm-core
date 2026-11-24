@@ -37,9 +37,11 @@ from software_defined_matter.sdf import sdf_ops as ops
 from software_defined_matter.sdf import sdf_shapes as shapes
 from software_defined_matter.sdf import transforms
 from software_defined_matter.sdf._helpers import _length
+from software_defined_matter.sdf._tree import iter_postorder, snapshot_tree
 
 if TYPE_CHECKING:
     from software_defined_matter.model import Part, SDFTree
+    from software_defined_matter.sdf.exactness import DistanceExactness
 
 
 SDFClosure = Callable[[jnp.ndarray, jnp.ndarray], jnp.ndarray]
@@ -58,6 +60,7 @@ class SDFEvaluator(Protocol):
     """
 
     binding: ParamBinding
+    distance_exactness: DistanceExactness
 
     def __call__(self, points: jnp.ndarray, free_vec: jnp.ndarray | None = None) -> jnp.ndarray: ...
 
@@ -128,6 +131,19 @@ def make_sdf_closure(
 ) -> SDFEvaluator:
     """Return a ``(points, free_vec) -> distance`` closure for ``tree``.
 
+    Compilation, diagnostics and distance inference share a private deep
+    snapshot of ``tree``. Later edits to the source dictionaries or nested
+    parameter lists do not change the evaluator; recompile to apply them.
+    Explicit free-parameter vectors remain live inputs.
+
+    The closure carries ``distance_exactness`` for its captured fixed values,
+    not the Part's declared bounds. A closure accepting free parameters carries
+    UNKNOWN because its ``free_vec`` argument is unrestricted, including under
+    JIT. Use ``infer_sdf_exactness`` separately for a conditional bounds proof.
+    Contracts describe field values, not gradient smoothness. Compilation
+    warns once per modifier or blend whose input distance requirements are
+    unproven; calling the evaluator does not repeat those diagnostics.
+
     Args:
         tree: SDF expression tree (as produced by the builders in
             :mod:`software_defined_matter.model` or loaded from a ``.sdm`` file).
@@ -137,6 +153,7 @@ def make_sdf_closure(
             ``part.metadata.get("smooth_csg", False)``. Pass ``True`` or
             ``False`` to override the metadata value.
     """
+    tree = snapshot_tree(tree)
     if b_smooth_csg is None:
         b_smooth_csg = bool(part.metadata.get("smooth_csg", False))
     binding = make_binding(part)
@@ -147,11 +164,20 @@ def make_sdf_closure(
         d_smooth_k=d_smooth_k,
     )
 
+    from software_defined_matter.sdf.validate import warn_distance_consumers
+
+    warn_distance_consumers(tree, binding=binding, b_smooth_csg=b_smooth_csg)
+
     def evaluate_sdf(points: jnp.ndarray, free_vec: jnp.ndarray | None = None) -> jnp.ndarray:
         if free_vec is None:
             free_vec = binding.initial_free_vector()
         return node_fn(jnp.asarray(points), jnp.asarray(free_vec))
 
+    from software_defined_matter.sdf.exactness import _infer_binding_exactness
+
+    evaluate_sdf.distance_exactness = _infer_binding_exactness(  # type: ignore[attr-defined]
+        tree, binding, b_smooth_csg=b_smooth_csg
+    )
     evaluate_sdf.binding = binding  # type: ignore[attr-defined]
     # The dynamic attribute above is what makes evaluate_sdf satisfy
     # SDFEvaluator at runtime; mypy cannot see an attribute attached after
@@ -173,13 +199,15 @@ def make_sdf_closure_with_binding(
     ``evaluate_sdf(points, free_vec=None) -> jnp.ndarray``. When ``free_vec``
     is ``None``, ``binding.initial_free_vector()`` is used. Both inputs are
     coerced via ``jnp.asarray``. The closure also carries a ``.binding``
-    attribute.
+    attribute. The source tree is privately snapshotted just as in
+    :func:`make_sdf_closure`; the supplied binding is still reused.
 
     ``b_smooth_csg=None`` resolves to ``False`` here because no ``Part`` is
     available to consult metadata. Pass ``True`` explicitly or prefer
     :func:`make_sdf_closure` (which reads ``part.metadata["smooth_csg"]``)
     when metadata-driven behaviour is desired.
     """
+    tree = snapshot_tree(tree)
     if b_smooth_csg is None:
         b_smooth_csg = False
     node_fn = _compile_node(
@@ -189,11 +217,20 @@ def make_sdf_closure_with_binding(
         d_smooth_k=d_smooth_k,
     )
 
+    from software_defined_matter.sdf.validate import warn_distance_consumers
+
+    warn_distance_consumers(tree, binding=binding, b_smooth_csg=b_smooth_csg)
+
     def evaluate_sdf(points: jnp.ndarray, free_vec: jnp.ndarray | None = None) -> jnp.ndarray:
         if free_vec is None:
             free_vec = binding.initial_free_vector()
         return node_fn(jnp.asarray(points), jnp.asarray(free_vec))
 
+    from software_defined_matter.sdf.exactness import UNKNOWN, DistanceExactness
+
+    evaluate_sdf.distance_exactness = DistanceExactness(  # type: ignore[attr-defined]
+        UNKNOWN, UNKNOWN, "binding-only compilation has no parameter-range contract"
+    )
     evaluate_sdf.binding = binding  # type: ignore[attr-defined]
     # The dynamic attribute above is what makes evaluate_sdf satisfy
     # SDFEvaluator at runtime; mypy cannot see an attribute attached after
@@ -203,7 +240,7 @@ def make_sdf_closure_with_binding(
 
 
 # ---------------------------------------------------------------------------
-# Internal: recursive tree walk
+# Internal: child-first compilation
 # ---------------------------------------------------------------------------
 
 
@@ -211,6 +248,26 @@ def _compile_node(
     node: SDFTree,
     binding: ParamBinding,
     *,
+    b_smooth_csg: bool,
+    d_smooth_k: float,
+) -> SDFClosure:
+    compiled: dict[int, SDFClosure] = {}
+    for current in iter_postorder(node):
+        compiled[id(current)] = _compile_shallow(
+            current,
+            binding,
+            compiled=compiled,
+            b_smooth_csg=b_smooth_csg,
+            d_smooth_k=d_smooth_k,
+        )
+    return compiled[id(node)]
+
+
+def _compile_shallow(
+    node: SDFTree,
+    binding: ParamBinding,
+    *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
@@ -224,6 +281,7 @@ def _compile_node(
         return _compile_op(
             node,
             binding,
+            compiled=compiled,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
@@ -231,6 +289,7 @@ def _compile_node(
         return _compile_transform(
             node,
             binding,
+            compiled=compiled,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
@@ -238,6 +297,7 @@ def _compile_node(
         return _compile_modifier(
             node,
             binding,
+            compiled=compiled,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
@@ -245,6 +305,7 @@ def _compile_node(
         return _compile_deform(
             node,
             binding,
+            compiled=compiled,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
@@ -252,6 +313,7 @@ def _compile_node(
         return _compile_2d_to_3d(
             node,
             binding,
+            compiled=compiled,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
@@ -259,6 +321,7 @@ def _compile_node(
         return _compile_loft(
             node,
             binding,
+            compiled=compiled,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
@@ -266,6 +329,7 @@ def _compile_node(
         return _compile_sweep(
             node,
             binding,
+            compiled=compiled,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
@@ -316,6 +380,8 @@ def _compile_primitive(node: dict[str, Any], binding: ParamBinding) -> SDFClosur
         return compile_raster_field(node)
     prim_fn = _PRIMITIVES[kind]
     raw_kwargs = _primitive_kwargs(node)
+    if kind == "solid_angle" and "c" in raw_kwargs:
+        raise ValueError("solid_angle requires theta in radians; c is not supported")
 
     def fn(p: jnp.ndarray, free_vec: jnp.ndarray) -> jnp.ndarray:
         resolved = resolve_param_kwargs(raw_kwargs, binding, free_vec)
@@ -408,14 +474,12 @@ def _compile_op(
     node: dict[str, Any],
     binding: ParamBinding,
     *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
     op_name = node["op"]
-    children: list[SDFClosure] = [
-        _compile_node(c, binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
-        for c in node["children"]
-    ]
+    children: list[SDFClosure] = [compiled[id(c)] for c in node["children"]]
     if not children:
         raise ValueError("CSG op has no children")
 
@@ -498,11 +562,12 @@ def _compile_transform(
     node: dict[str, Any],
     binding: ParamBinding,
     *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
     tf_name = node["transform"]
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = compiled[id(node["child"])]
     raw_kwargs = _op_kwargs(node)
 
     if tf_name == "translate":
@@ -654,11 +719,12 @@ def _compile_modifier(
     node: dict[str, Any],
     binding: ParamBinding,
     *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
     name = node["modifier"]
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = compiled[id(node["child"])]
     raw_kwargs = _op_kwargs(node)
 
     if name == "round":
@@ -692,11 +758,12 @@ def _compile_deform(
     node: dict[str, Any],
     binding: ParamBinding,
     *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
     name = node["deform"]
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = compiled[id(node["child"])]
     raw_kwargs = _op_kwargs(node)
 
     if name == "twist":
@@ -795,11 +862,12 @@ def _compile_2d_to_3d(
     node: dict[str, Any],
     binding: ParamBinding,
     *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
     method = node["method"]
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = compiled[id(node["child"])]
     raw_kwargs = _op_kwargs(node)
 
     if method == "revolution":
@@ -850,15 +918,13 @@ def _compile_loft(
     node: dict[str, Any],
     binding: ParamBinding,
     *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
     """Loft N 2D cross-section children along Z at the stations in ``params['z']``
     (see :func:`software_defined_matter.sdf.sdf_ops.loft`)."""
-    children = [
-        _compile_node(c, binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
-        for c in node["children"]
-    ]
+    children = [compiled[id(c)] for c in node["children"]]
     if len(children) < 2:
         raise ValueError("loft needs at least 2 cross-section children")
     raw_kwargs = _op_kwargs(node)
@@ -937,10 +1003,11 @@ def _compile_sweep(
     node: dict[str, Any],
     binding: ParamBinding,
     *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = compiled[id(node["child"])]
     raw_kwargs = _op_kwargs(node)
     if "path" not in raw_kwargs:
         raise ValueError("sweep requires a 'path' param: a list of [x, y, z] control points")

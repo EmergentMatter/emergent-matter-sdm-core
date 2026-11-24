@@ -23,6 +23,7 @@ checkout.
   instead of being identical to `minimal_0.2.sdm` in every field but its
   declared version. `minimal_0.4.sdm` adds two attached bodies and a radial
   Hermite flexure, exercising the new blend and its inverse capability.
+  `minimal_0.8.sdm` uses the scalar `theta` solid-angle input.
   `minimal_0.6.sdm` adds the `shear_linear` deform introduced by that schema.
   `axis_warps_0.6.sdm` exercises `scale_axis` and `taper_linear` in the same version.
   `minimal_0.7.sdm` carries an `extension` node with a public fallback; any reader must

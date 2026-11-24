@@ -1,0 +1,8 @@
+{
+  "schema_version": "0.8",
+  "name": "solid_angle_theta",
+  "params": {},
+  "materials": [{"material_id": 1, "name": "solid", "sdf_tree": {
+    "type": "primitive", "kind": "solid_angle", "params": {"theta": 0.7853981633974483, "ra": 2.0}
+  }}]
+}

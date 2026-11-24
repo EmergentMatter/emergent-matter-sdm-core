@@ -1,0 +1,1 @@
+Prevent approximate or unknown exterior fields from passing gap assertions, even when their estimates match declared clearances. Retain distance provenance on gap results and report unverified comparisons explicitly. Exact-field comparisons remain sampled estimates, not certified minimum-clearance proofs.

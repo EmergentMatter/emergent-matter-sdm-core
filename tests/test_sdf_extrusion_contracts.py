@@ -1,0 +1,183 @@
+"""Extrusion distance claims require a justified profile and positive finite height bounds."""
+
+from __future__ import annotations
+
+import math
+import warnings
+
+import jax
+import jax.numpy as jnp
+import pytest
+
+from software_defined_matter import (
+    MaterialRegion,
+    Param,
+    Part,
+    sdf_2d_to_3d,
+    sdf_modifier,
+    sdf_op,
+    sdf_primitive,
+    sdf_transform,
+)
+from software_defined_matter.audit import GapAuditError, assert_gaps
+from software_defined_matter.dsl.expr import compile_expr
+from software_defined_matter.sdf.compile import make_sdf_closure
+from software_defined_matter.sdf.exactness import (
+    EXACT,
+    LOWER_BOUND,
+    UNKNOWN,
+    DistanceAccuracyWarning,
+    infer_sdf_exactness,
+)
+
+
+def _profile(kind="circle"):
+    circle = sdf_primitive("circle_2d", r=1)
+    if kind in ("union", "intersect"):
+        return sdf_op(kind, [sdf_transform("translate", circle, t=[x, 0]) for x in (-0.5, 0.5)])
+    if kind == "scaled":
+        return sdf_transform("scale_axis", circle, s=[2, 1])
+    if kind == "unknown":
+        return sdf_primitive("rounded_box_2d", b=[1, 1], r=2)
+    return circle
+
+
+def _extrusion(profile="circle", bounds=(1, 3)):
+    tree = sdf_2d_to_3d("extrusion", _profile(profile), h={"$ref": "h"})
+    part = Part(
+        name="extrusion",
+        params={"h": Param("h", 2, free=True, bounds=bounds, unit="mm")},
+        materials=[MaterialRegion(1, "body", tree)],
+    )
+    return tree, part
+
+
+@pytest.mark.parametrize(
+    "profile, outside, inside",
+    [
+        ("circle", EXACT, EXACT),
+        ("union", EXACT, LOWER_BOUND),
+        ("intersect", LOWER_BOUND, EXACT),
+        ("scaled", LOWER_BOUND, LOWER_BOUND),
+        ("unknown", UNKNOWN, UNKNOWN),
+    ],
+    ids=["exact", "exact-exterior", "exact-interior", "bound", "unknown"],
+)
+def test_extrusion_preserves_only_justified_child_sides(profile, outside, inside):
+    tree, part = _extrusion(profile)
+    contract = infer_sdf_exactness(tree, part)
+    assert (contract.outside, contract.inside) == (outside, inside)
+    compiled = make_sdf_closure(tree, part)
+    # Free vectors are unrestricted at runtime, so their compiled contract
+    # must not reuse a conditional proof over declared parameter bounds.
+    assert compiled.distance_exactness.outside == compiled.distance_exactness.inside == UNKNOWN
+    tree["params"]["h"] = 2
+    fixed = Part(name="fixed", materials=[MaterialRegion(1, "body", tree)])
+    fixed_contract = make_sdf_closure(tree, fixed).distance_exactness
+    assert (fixed_contract.outside, fixed_contract.inside) == (outside, inside)
+
+
+@pytest.mark.parametrize(
+    "bounds",
+    [(-1, 3), (0, 3), (-3, -1), (0, 0), (1, math.inf)],
+    ids=["crossing-zero", "touching-zero", "negative", "zero", "unbounded"],
+)
+def test_invalid_height_ranges_do_not_inherit_exactness(bounds):
+    tree, part = _extrusion(bounds=bounds)
+    contract = infer_sdf_exactness(tree, part)
+    assert contract.outside == contract.inside == UNKNOWN
+    assert infer_sdf_exactness(tree, part, mode="values").is_exact
+
+
+@pytest.mark.parametrize(
+    "height", [0, -1, math.inf, math.nan], ids=["zero", "negative", "inf", "nan"]
+)
+def test_invalid_literal_heights_are_unknown(height):
+    tree = sdf_2d_to_3d("extrusion", _profile(), h=height)
+    contract = infer_sdf_exactness(tree, Part(name="invalid-height"))
+    assert contract.outside == contract.inside == UNKNOWN
+
+
+def test_missing_height_or_bounds_cannot_establish_an_extrusion_contract():
+    tree, part = _extrusion(bounds=None)
+    assert not infer_sdf_exactness(tree, part).is_exact
+    del tree["params"]["h"]
+    assert not infer_sdf_exactness(tree, part).is_exact
+    tree["method"] = "extrude"
+    tree["params"]["h"] = 2
+    assert not infer_sdf_exactness(tree, part).is_exact
+
+
+def test_exact_extrusion_matches_cylinder_distances_at_height_endpoints_under_jit():
+    tree, part = _extrusion()
+    fn = jax.jit(make_sdf_closure(tree, part))
+    for d_h in (1, 2, 3):
+        points = jnp.array([[0.5, 0, 0], [0, 0, d_h + 0.5], [1.3, 0, d_h + 0.4]], dtype=jnp.float32)
+        # Side, cap, and corner: the corner is a 3-4-5 distance triangle.
+        assert fn(points, jnp.array([d_h], dtype=jnp.float32)).tolist() == pytest.approx(
+            [-0.5, 0.5, 0.5], abs=1e-6
+        )
+
+
+@pytest.mark.parametrize(
+    "bounds", [(1, 3), (-1, 3)], ids=["positive-range", "positive-current-only"]
+)
+def test_gap_assertions_accept_extrusions_with_exact_current_geometry(bounds):
+    tree, source = _extrusion(bounds=bounds)
+    part = Part(
+        name="extruded-gap",
+        params=source.params,
+        materials=[
+            MaterialRegion(1, "a", tree),
+            MaterialRegion(2, "b", sdf_transform("translate", tree, t=[3, 0, 0])),
+        ],
+    )
+    # Gap audits freeze current values, even if the optimization range
+    # includes heights that would not justify a distance contract.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DistanceAccuracyWarning)
+        (check,) = assert_gaps(part, {("a", "b"): 1}, d_voxel=0.5, d_tol=0.02)
+    assert check.b_exact_outside and check.b_ok
+
+
+@pytest.mark.parametrize("cause", ["unknown-profile", "zero-height"])
+def test_gap_assertions_refuse_uncertified_extrusions(cause):
+    tree = sdf_2d_to_3d(
+        "extrusion",
+        _profile("unknown" if cause == "unknown-profile" else "circle"),
+        h=2 if cause == "unknown-profile" else 0,
+    )
+    part = Part(
+        name="unverified-gap",
+        materials=[
+            MaterialRegion(1, "a", tree),
+            MaterialRegion(2, "b", sdf_transform("translate", tree, t=[5, 0, 0])),
+        ],
+    )
+    with (
+        pytest.warns(DistanceAccuracyWarning, match="field-value estimate"),
+        pytest.raises(GapAuditError, match="UNVERIFIED.*exact exterior distances required"),
+    ):
+        assert_gaps(part, {("a", "b"): 3}, d_voxel=0.5, d_tol=0.02)
+
+
+def test_exact_extrusions_do_not_trigger_modifier_or_length_metric_warnings():
+    tree = sdf_2d_to_3d("extrusion", _profile(), h=2)
+    part = Part(name="fixed-height", materials=[MaterialRegion(1, "body", tree)])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DistanceAccuracyWarning)
+        make_sdf_closure(sdf_modifier("onion", tree, thickness=0.1), part)
+        compile_expr(
+            {"type": "metric", "name": "min_value"}, part, sdf_closure=make_sdf_closure(tree, part)
+        )
+
+
+def test_inexact_extrusion_interiors_still_trigger_length_consumer_warnings():
+    tree = sdf_2d_to_3d("extrusion", _profile("union"), h=2)
+    part = Part(name="union-height", materials=[MaterialRegion(1, "body", tree)])
+    with pytest.warns(DistanceAccuracyWarning, match="onion reads a side"):
+        make_sdf_closure(sdf_modifier("onion", tree, thickness=0.1), part)
+    with pytest.warns(DistanceAccuracyWarning, match="not geometric lengths"):
+        compile_expr(
+            {"type": "metric", "name": "min_value"}, part, sdf_closure=make_sdf_closure(tree, part)
+        )

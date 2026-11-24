@@ -77,7 +77,7 @@ WIRE_SHAPES: tuple[WireShape, ...] = get_args(WireShape)
 #: with ``model.KNOWN_SCHEMA_VERSIONS`` by ``test_wire_contract.py``, not by
 #: import, so this module never needs the version-ordering machinery in
 #: ``model.py`` to describe a static fact about when a field was added.
-SchemaVersion = Literal["0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7"]
+SchemaVersion = Literal["0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8"]
 SCHEMA_VERSIONS: tuple[SchemaVersion, ...] = get_args(SchemaVersion)
 
 #: Versioned additions inside static kinematics schema definitions.
@@ -401,7 +401,7 @@ PRIMITIVES: dict[str, NodeSpec] = {
         ParamSpec("r2", True, "scalar"),
     )),
     "solid_angle": NodeSpec("solid_angle", "primitive", dim=3, params=(
-        ParamSpec("c", True, "vec2"),
+        ParamSpec("theta", True, "scalar", since="0.8"),
         ParamSpec("ra", True, "scalar"),
     )),
     "cut_sphere": NodeSpec("cut_sphere", "primitive", dim=3, params=(

@@ -1,0 +1,1 @@
+Require finite translation and rotation parameter domains before inheriting child distance contracts. Singular expressions, nonfinite inputs, and missing range proofs now remain unknown and trigger distance-consumer warnings during load and compilation.

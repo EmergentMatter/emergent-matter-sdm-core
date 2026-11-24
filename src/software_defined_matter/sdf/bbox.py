@@ -11,8 +11,10 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Literal, get_args
+
+from software_defined_matter.sdf._tree import iter_postorder
 
 if TYPE_CHECKING:
     from software_defined_matter.model import MaterialRegion, Part, SDFTree
@@ -276,7 +278,43 @@ def _current_values(part: Part) -> dict[str, float]:
     return values
 
 
+def _bbox_children(node: Any) -> list[Any]:
+    if not isinstance(node, dict):
+        return []
+    if node.get("type") == "op":
+        children = node.get("children") or []
+        if node.get("op") in ("subtract", "smooth_subtract"):
+            return children[:1]
+        return list(children)
+    if node.get("type") in ("transform", "modifier", "deform"):
+        return [node["child"]]
+    return []
+
+
 def _infer_node_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox:
+    boxes: dict[int, BBox | BBoxInferenceError] = {}
+
+    def child_box(child: dict[str, Any]) -> BBox:
+        result = boxes[id(child)]
+        if isinstance(result, BBoxInferenceError):
+            raise result
+        return result
+
+    for current in iter_postorder(node, _bbox_children):
+        try:
+            boxes[id(current)] = _infer_bbox_shallow(current, intervals, child_box)
+        except BBoxInferenceError as exc:
+            # Intersection can be bounded by another child when this one is
+            # unbounded; preserve that decision for the parent operation.
+            boxes[id(current)] = exc
+    return child_box(node)
+
+
+def _infer_bbox_shallow(
+    node: dict[str, Any],
+    intervals: dict[str, Interval],
+    child_box: Callable[[dict[str, Any]], BBox],
+) -> BBox:
     if not isinstance(node, dict) or "type" not in node:
         raise UnsupportedSDFNodeError(f"Not an SDF node: {node!r}")
 
@@ -284,17 +322,17 @@ def _infer_node_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BB
     if node_type == "primitive":
         return _infer_primitive_bbox(node, intervals)
     if node_type == "op":
-        return _infer_op_bbox(node, intervals)
+        return _infer_op_bbox(node, intervals, child_box)
     if node_type == "transform":
-        return _infer_transform_bbox(node, intervals)
+        return _infer_transform_bbox(node, intervals, child_box)
     if node_type == "modifier":
-        return _infer_modifier_bbox(node, intervals)
+        return _infer_modifier_bbox(node, intervals, child_box)
     if node_type == "2d_to_3d":
         return _infer_2d_to_3d_bbox(node, intervals)
     if node_type == "loft":
         return _infer_loft_bbox(node, intervals)
     if node_type == "deform":
-        return _infer_deform_bbox(node, intervals)
+        return _infer_deform_bbox(node, intervals, child_box)
     if node_type == "sweep":
         return _infer_sweep_bbox(node, intervals)
     if node_type == "extension":
@@ -409,13 +447,22 @@ def _infer_primitive_bbox(node: dict[str, Any], intervals: dict[str, Interval]) 
         return _bbox_center_half((0.0, 0.0, 0.0), (r1 + r2, ext, r2))
     if kind == "cone":
         h = _scalar_abs_max(kw["h"], intervals)
-        c = _vec_abs_max(kw["c"], 2, intervals)
-        tan_term = c[0] / max(c[1], 1e-8)
-        r = abs(h * tan_term)
+        c = _vec_intervals(kw["c"], 2, intervals)
+        # The widest cone can occur at the smallest denominator. Interval
+        # division also rejects a range containing zero; a numeric floor
+        # would invent a finite bound for a singular or much wider cone.
+        ratio = _interval_binop("/", c[0], c[1])
+        r = h * max(abs(v) for v in ratio)
+        if not (math.isfinite(r) and math.isfinite(h)):
+            raise UnsupportedSDFNodeError("Cone dimensions do not establish a finite bounding box")
         return _bbox_center_half((0.0, 0.0, 0.0), (r, r, h))
     if kind == "hex_prism":
-        radius, half_h = _vec_abs_max(kw["h"], 2, intervals)
-        return _bbox_center_half((0.0, 0.0, 0.0), (radius, radius, half_h))
+        apothem, half_h = _vec_abs_max(kw["h"], 2, intervals)
+        # h[0] is the distance to the horizontal faces, not to the X tips.
+        # Enclose those vertices before this box can prove CSG disjointness
+        # or cutter containment.
+        half_x = 2.0 * apothem / math.sqrt(3.0)
+        return _bbox_center_half((0.0, 0.0, 0.0), (half_x, apothem, half_h))
     if kind == "tri_prism":
         radius, half_h = _vec_abs_max(kw["h"], 2, intervals)
         return _bbox_center_half((0.0, 0.0, 0.0), (radius, radius, half_h))
@@ -511,7 +558,11 @@ def _infer_primitive_bbox(node: dict[str, Any], intervals: dict[str, Interval]) 
     raise UnsupportedSDFNodeError(f"Unknown primitive {kind!r}")
 
 
-def _infer_op_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox:
+def _infer_op_bbox(
+    node: dict[str, Any],
+    intervals: dict[str, Interval],
+    child_box: Callable[[dict[str, Any]], BBox],
+) -> BBox:
     op = node["op"]
     children = node["children"]
     if not children:
@@ -521,10 +572,10 @@ def _infer_op_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox
         # Subtract is bounded by the minuend; the subtrahend may be
         # unbounded (e.g. a half-space `plane` used as a cutting tool), so
         # only the first child is inferred.
-        return _infer_node_bbox(children[0], intervals)
+        return child_box(children[0])
 
     if op in ("union", "smooth_union"):
-        return _bbox_enclose(_infer_node_bbox(c, intervals) for c in children)
+        return _bbox_enclose(child_box(c) for c in children)
 
     if op in ("intersect", "smooth_intersect"):
         # Intersect is bounded iff at least one child is bounded: that
@@ -534,7 +585,7 @@ def _infer_op_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox
         last_err: BBoxInferenceError | None = None
         for c in children:
             try:
-                bounded.append(_infer_node_bbox(c, intervals))
+                bounded.append(child_box(c))
             except BBoxInferenceError as exc:
                 last_err = exc
         if not bounded:
@@ -546,9 +597,13 @@ def _infer_op_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox
     raise UnsupportedSDFNodeError(f"Unsupported op {op!r} for bbox inference")
 
 
-def _infer_transform_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox:
+def _infer_transform_bbox(
+    node: dict[str, Any],
+    intervals: dict[str, Interval],
+    child_box: Callable[[dict[str, Any]], BBox],
+) -> BBox:
     tf = node["transform"]
-    child_bbox = _infer_node_bbox(node["child"], intervals)
+    child_bbox = child_box(node["child"])
     params = node.get("params", {}) or {}
 
     if tf == "translate":
@@ -559,13 +614,14 @@ def _infer_transform_bbox(node: dict[str, Any], intervals: dict[str, Interval]) 
         )
     if tf == "scale":
         s_lo, s_hi = _scalar_interval(params["s"], intervals)
-        if s_lo <= 0.0 <= s_hi:
-            raise UnsupportedSDFNodeError(
-                "Scale interval spans zero; unsupported for MVP bbox inference"
-            )
-        s_abs = max(abs(s_lo), abs(s_hi))
+        # Negative factors reverse the field's sign in the evaluator, so
+        # scaling a finite child box cannot bound the resulting solid.
+        if not (0.0 < s_lo <= s_hi < math.inf):
+            raise UnsupportedSDFNodeError("Scale factors must stay positive and finite")
+        # An offset child moves toward the origin at smaller scales. The
+        # largest factor alone only encloses boxes containing the origin.
         corners = _bbox_corners(child_bbox)
-        scaled = [_vec3(s_abs * c for c in corner) for corner in corners]
+        scaled = [_vec3(s * c for c in corner) for s in (s_lo, s_hi) for corner in corners]
         return _points_to_bbox(scaled)
     if tf == "scale_axis":
         # Each axis scales independently, across the whole bounds of its
@@ -629,9 +685,13 @@ def _infer_transform_bbox(node: dict[str, Any], intervals: dict[str, Interval]) 
     raise UnsupportedSDFNodeError(f"Unknown transform {tf!r}")
 
 
-def _infer_modifier_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox:
+def _infer_modifier_bbox(
+    node: dict[str, Any],
+    intervals: dict[str, Interval],
+    child_box: Callable[[dict[str, Any]], BBox],
+) -> BBox:
     mod = node["modifier"]
-    child_bbox = _infer_node_bbox(node["child"], intervals)
+    child_bbox = child_box(node["child"])
     params = node.get("params", {}) or {}
     if mod == "round":
         r = _scalar_abs_max(params["r"], intervals)
@@ -779,7 +839,11 @@ def _infer_sweep_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> B
     return (_vec3(lo[a] - rad for a in range(3)), _vec3(hi[a] + rad for a in range(3)))
 
 
-def _infer_deform_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox:
+def _infer_deform_bbox(
+    node: dict[str, Any],
+    intervals: dict[str, Interval],
+    child_box: Callable[[dict[str, Any]], BBox],
+) -> BBox:
     """Conservative bbox for ``twist`` / ``bend`` / ``displace`` deforms.
 
     - ``twist`` rotates the xz plane around the Y axis; rotation preserves
@@ -803,7 +867,7 @@ def _infer_deform_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> 
     box when ``k`` is small.
     """
     deform = node["deform"]
-    child_bbox = _infer_node_bbox(node["child"], intervals)
+    child_bbox = child_box(node["child"])
     (xlo, ylo, zlo), (xhi, yhi, zhi) = child_bbox
 
     if deform == "twist":
@@ -992,8 +1056,15 @@ def _interval_binop(op: str, lhs: Interval, rhs: Interval) -> Interval:
             raise UnsupportedExprError("pow with non-constant exponent is unsupported")
         p = b0
         if float(p).is_integer():
+            # Endpoint values cannot bound a reciprocal across its pole.
+            # Reject before evaluation so zero endpoints use the same
+            # inference error as a singularity inside the interval.
+            if p < 0 and a0 <= 0.0 <= a1:
+                raise UnsupportedExprError(
+                    "Negative power over interval spanning zero is unsupported"
+                )
             vals = (a0**p, a1**p)
-            if int(p) % 2 == 0 and a0 <= 0.0 <= a1:
+            if p > 0 and int(p) % 2 == 0 and a0 <= 0.0 <= a1:
                 return (0.0, max(vals))
             return (min(vals), max(vals))
         raise UnsupportedExprError("pow with non-integer exponent is unsupported")

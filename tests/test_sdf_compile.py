@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import jax.numpy as jnp
+import pytest
 
 from software_defined_matter import (
     MaterialRegion,
@@ -15,6 +16,7 @@ from software_defined_matter.sdf import sdf_ops as ops
 from software_defined_matter.sdf import sdf_shapes as shapes
 from software_defined_matter.sdf import transforms
 from software_defined_matter.sdf.compile import make_sdf_closure
+from software_defined_matter.sdf.exactness import DistanceAccuracyWarning
 
 
 def _points():
@@ -112,7 +114,8 @@ def test_make_sdf_closure_smooth_csg_toggle_changes_hard_boolean():
 def test_example_part_compiles(example_part):
     import jax
 
-    sdf = make_sdf_closure(example_part.computed_envelope(), example_part)
+    with pytest.warns(DistanceAccuracyWarning, match="smooth_union blends non-exact fields"):
+        sdf = make_sdf_closure(example_part.computed_envelope(), example_part)
     free_vec = jnp.asarray(example_part.param_vector(), dtype=jnp.float32)
     p = _points()
     d = sdf(p, free_vec)

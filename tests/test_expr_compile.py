@@ -25,6 +25,7 @@ from software_defined_matter.dsl.expr import (
     expr_unop,
 )
 from software_defined_matter.dsl.resolve import make_binding
+from software_defined_matter.sdf.exactness import DistanceAccuracyWarning
 
 
 def _simple_part(radius=3.0, free=True):
@@ -91,7 +92,8 @@ def test_compile_expr_symbolic_constraint_wall_thickness(example_part):
     """For the canonical example, ``outer_radius - inner_radius`` is evaluated
     against the free-param vector without ever touching the SDF."""
     wall = next(c for c in example_part.constraints if c.name == "wall_thickness")
-    fn = compile_expr(wall.expr, example_part)
+    with pytest.warns(DistanceAccuracyWarning, match="smooth_union blends non-exact fields"):
+        fn = compile_expr(wall.expr, example_part)
     free_vec = jnp.asarray(example_part.param_vector(), dtype=jnp.float32)
     # outer_radius (10) - inner_radius (7) == 3.0
     # Note order depends on dict insertion; use names to compute ground truth:
@@ -224,7 +226,8 @@ def test_compile_expr_example_volume_grad_is_finite(example_part):
         | {"grid_resolution": 48, "metric_skip_resolution_check": True},
     )
     max_vol = next(c for c in part.constraints if c.name == "max_volume")
-    fn = compile_expr(max_vol.expr, part)
+    with pytest.warns(DistanceAccuracyWarning, match="smooth_union blends non-exact fields"):
+        fn = compile_expr(max_vol.expr, part)
     free_vec = jnp.asarray(part.param_vector(), dtype=jnp.float32)
     val = fn(free_vec)
     assert jnp.isfinite(val)

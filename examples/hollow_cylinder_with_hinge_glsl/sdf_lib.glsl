@@ -248,8 +248,9 @@ float sdf_capped_cone(vec3 p, float h, float r1, float r2) {
     return s * sqrt(min(dot(ca, ca), dot(cb, cb)));
 }
 
-float sdf_solid_angle(vec3 p, vec2 c, float ra) {
-    // c = [sin(angle), cos(angle)]
+float sdf_solid_angle(vec3 p, float theta, float ra) {
+    // Scalar half-angle in radians.
+    vec2 c = vec2(sin(theta), cos(theta));
     vec2 q = vec2(length(p.xy), p.z);
     float l = length(q) - ra;
     float m = length(q - c * clamp(dot(q, c), 0.0, ra));

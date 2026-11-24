@@ -1,0 +1,1 @@
+Resolve gap-audit parameters through the SDF binding before inferring bounds, rates, distance contracts or sampling fields. Use a private fixed-value snapshot so stale or missing derived caches cannot produce false clearance passes, without mutating the caller.

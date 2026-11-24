@@ -1,0 +1,1 @@
+Warn about unproven modifier and blend length interpretations during validated loading and both SDF compilation entry points. Respect actual bindings, current values, parameter envelopes, and smoothing overrides; emit path-specific diagnostics outside JAX evaluation.

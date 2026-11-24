@@ -1,0 +1,1 @@
+Replace the solid-angle direction vector `c` with a scalar half-angle `theta` in radians in schema 0.8, the JAX evaluator, and GLSL. Derive sine/cosine internally and reject `c`, including in older documents. Add `sdf_solid_angle(theta, ra)`.

@@ -330,6 +330,28 @@ def compile_expr(
             d_smooth_k=d_smooth_k,
         )
 
+    from software_defined_matter.sdf.exactness import DistanceAccuracyWarning, DistanceExactness
+
+    def warn_length_metrics(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        if node.get("type") == "metric" and node.get("name") in ("min_value", "max_value"):
+            contract = getattr(sdf_closure, "distance_exactness", None)
+            if not isinstance(contract, DistanceExactness) or not contract.is_exact:
+                warnings.warn(
+                    f"{node['name']}: the sampled field is not certified exact on both sides; "
+                    "this metric measures field values, not geometric lengths.",
+                    DistanceAccuracyWarning,
+                    stacklevel=3,
+                )
+        for value in node.values():
+            if isinstance(value, dict):
+                warn_length_metrics(value)
+            elif isinstance(value, list):
+                for child in value:
+                    warn_length_metrics(child)
+
+    warn_length_metrics(tree)
     binding = make_binding(part)
 
     from software_defined_matter.sdf.compile import make_sdf_closure_with_binding
@@ -347,6 +369,29 @@ def compile_expr(
                 env_tree, binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k
             )
         return _env_cache[key]
+
+    # Compile metric envelopes before returning the objective so their distance
+    # diagnostics never first appear inside a JIT/gradient trace. Grid creation
+    # stays lazy; pure symbolic expressions do not require a geometric envelope.
+    metric_nodes: list[dict[str, Any]] = []
+
+    def collect_metrics(node: Any) -> None:
+        if isinstance(node, dict):
+            if node.get("type") == "metric":
+                metric_nodes.append(node)
+                return
+            for value in node.values():
+                collect_metrics(value)
+        elif isinstance(node, list):
+            for value in node:
+                collect_metrics(value)
+
+    collect_metrics(tree)
+    default_env_tree = _default_envelope_tree(part) if metric_nodes else None
+    for metric_node in metric_nodes:
+        env_tree = metric_node.get("args", {}).get("envelope", default_env_tree)
+        if env_tree is not None:
+            _envelope_closure(env_tree)
 
     if "metric_bbox_pad" in part.metadata:
         warnings.warn(
@@ -368,7 +413,7 @@ def compile_expr(
 
     def _sampling_domain() -> tuple:
         if "bbox" not in _cache:
-            env_tree = _default_envelope_tree(part)
+            env_tree = default_env_tree
             raw = _resolve_bbox(part, env_tree)
             bbox, res, d_h = cubic_grid(
                 raw,

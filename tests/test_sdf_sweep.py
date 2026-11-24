@@ -33,6 +33,7 @@ from software_defined_matter import (
 )
 from software_defined_matter.sdf.bbox import infer_sdf_bbox
 from software_defined_matter.sdf.compile import make_sdf_closure
+from software_defined_matter.sdf.exactness import DistanceAccuracyWarning
 
 _NF = jnp.zeros((0,))
 
@@ -135,7 +136,8 @@ def test_subdividing_a_straight_sweep_preserves_cap_depth_and_shell():
     actual = f(points, _NF)
     # Float32 frame and cylinder arithmetic differ by a few ulps.
     np.testing.assert_allclose(actual, expected, atol=2e-6, rtol=0.0)
-    shell, _ = _jclosure(sdf_modifier("onion", tree, thickness=0.25))
+    with pytest.warns(DistanceAccuracyWarning, match="onion reads a side"):
+        shell, _ = _jclosure(sdf_modifier("onion", tree, thickness=0.25))
     np.testing.assert_allclose(shell(points, _NF), jnp.abs(expected) - 0.25, atol=2e-6, rtol=0.0)
     grads = jax.vmap(jax.grad(lambda p: f(p[None, :], _NF)[0]))(points)
     assert bool(jnp.all(jnp.isfinite(grads)))
