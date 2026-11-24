@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import math
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -26,6 +27,7 @@ from software_defined_matter import (
 )
 from software_defined_matter.sdf.bbox import infer_sdf_bbox
 from software_defined_matter.sdf.compile import make_sdf_closure
+from software_defined_matter.sdf.lipschitz import infer_sdf_max_rate
 
 _NF = jnp.zeros((0,))
 
@@ -223,6 +225,118 @@ def test_continuous_across_the_branch_cut():
 # ---------------------------------------------------------------------------
 # Marcher safety, bbox, plumbing
 # ---------------------------------------------------------------------------
+
+
+def test_shallow_coarse_thread_bounds_the_flank_deep_in_the_bore():
+    tree = sdf_screw_thread(r_root=2.0, depth=0.1, pitch=12.0, width=1.0, n_turns=2.0)
+    part = _part(tree)
+    closure = make_sdf_closure(tree, part)
+
+    def scalar(p):
+        return closure(p[None, :], _NF)[0]
+
+    p = jnp.array([-0.6530567, 0.8484198, -1.711034], dtype=jnp.float32)
+    gradient = jax.jit(jax.grad(scalar))(p)
+    rate = float(jnp.linalg.norm(gradient))
+    bound = infer_sdf_max_rate(tree, part)
+    assert rate <= bound + 2e-6  # float32 roundoff, not geometric slack
+    direction = gradient / jnp.linalg.norm(gradient)
+    step = 1e-3
+    difference = abs(float(scalar(p + step * direction) - scalar(p - step * direction)))
+    assert difference <= 2 * step * bound + 2e-6
+
+
+@pytest.mark.parametrize(
+    "root,depth,pitch,width,angle,hand",
+    [
+        (2.0, 0.1, 12.0, 1.0, 60.0, 1.0),
+        (2.0, 0.01, 12.0, 0.01, 60.0, -1.0),
+        (2.0, 3.0, 12.0, 1.0, 29.0, 1.0),
+        (27.0, 1.84, 3.0, 2.6, 55.0, 1.0),
+        (2.0, 0.1, -12.0, 1.0, 60.0, -1.0),
+        (2.0, 0.1, 12.0, 1.0, 0.0, 1.0),
+        (2.0, 0.1, 12.0, 1.0, 180.0, 1.0),
+        (2e-7, 1e-8, 12e-7, 1e-7, 60.0, 1.0),
+    ],
+    ids=[
+        "shallow",
+        "narrow-left",
+        "deep",
+        "fine",
+        "negative-pitch",
+        "zero-angle",
+        "flat-angle",
+        "small-scale",
+    ],
+)
+def test_thread_rate_is_bounded_from_axis_through_flanks_and_crest(
+    root, depth, pitch, width, angle, hand
+):
+    tree = sdf_screw_thread(
+        r_root=root,
+        depth=depth,
+        pitch=pitch,
+        width=width,
+        n_turns=2.0,
+        flank_deg=angle,
+        handedness=hand,
+    )
+    part = _part(tree)
+    closure = make_sdf_closure(tree, part)
+
+    def scalar(p):
+        return closure(p[None, :], _NF)[0]
+
+    # Logarithmic radii cover the axis and deep bore; the linear part resolves
+    # both sides of the root and crest. Include tooth folds and the atan2 cut.
+    radii = np.r_[
+        0.0, root * np.geomspace(1e-8, 1.0, 24), np.linspace(0.25 * root, root + 2 * depth, 48)
+    ]
+    r, theta, offset = np.meshgrid(
+        radii, np.linspace(-np.pi, np.pi, 13), np.linspace(-0.6, 0.6, 25), indexing="ij"
+    )
+    points = jnp.asarray(
+        np.stack(
+            [r * np.cos(theta), r * np.sin(theta), pitch * (hand * theta / (2 * np.pi) + offset)],
+            -1,
+        ).reshape(-1, 3),
+        dtype=jnp.float32,
+    )
+    values, gradients = jax.jit(jax.vmap(jax.value_and_grad(scalar)))(points)
+    assert bool(jnp.all(jnp.isfinite(values)))
+    assert bool(jnp.all(jnp.isfinite(gradients)))
+    bound = infer_sdf_max_rate(tree, part)
+    assert float(jnp.max(jnp.linalg.norm(gradients, axis=-1))) <= bound + 3e-6
+    step = root * 1e-3
+    moved = points + step * jnp.array([0.3, 0.4, np.sqrt(0.75)])
+    differences = jnp.abs(jax.jit(jax.vmap(scalar))(moved) - values)
+    # Float32 subtraction at coordinates of order root/pitch needs absolute slack.
+    assert float(jnp.max(differences)) <= step * bound + root * 4e-6
+
+
+def test_thread_flank_divisor_keeps_parameter_gradients_consistent():
+    from software_defined_matter.sdf.sdf_shapes import screw_thread
+
+    def value(params):
+        return screw_thread(
+            jnp.array([2.0, 0.0, 1.5]),
+            r_root=params[0],
+            depth=0.1,
+            pitch=params[1],
+            width=1.0,
+            n_turns=2.0,
+        )
+
+    params = jnp.array([2.0, 12.0])
+    gradient = jax.jit(jax.grad(value))(params)
+    step = 2e-3
+    offsets = step * jnp.eye(2)
+    finite_difference = (jax.vmap(value)(params + offsets) - jax.vmap(value)(params - offsets)) / (
+        2 * step
+    )
+    assert bool(jnp.all(jnp.isfinite(gradient)))
+    # Float32 subtraction amplified by the finite-difference step.
+    np.testing.assert_allclose(gradient, finite_difference, atol=2e-4, rtol=1e-3)
 
 
 def test_bbox_is_tight():

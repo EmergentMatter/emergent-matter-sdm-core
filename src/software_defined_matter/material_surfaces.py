@@ -96,21 +96,6 @@ def _supported(tree: dict[str, Any]) -> None:
         _supported(tree["child"])
 
 
-def _primitive_scale(tree: dict[str, Any], intervals: Any) -> float:
-    """Plane fields use the authored normal verbatim, which need not be unit length."""
-    from software_defined_matter.sdf.bbox import _vec_intervals
-
-    rate = 1.0
-    if tree.get("type") == "primitive" and tree.get("kind") == "plane":
-        normal = _vec_intervals(tree["params"]["n"], 3, intervals)
-        rate = max(rate, math.hypot(*(max(abs(a), abs(b)) for a, b in normal)))
-    for child in tree.get("children", []):
-        rate = max(rate, _primitive_scale(child, intervals))
-    if "child" in tree:
-        rate = max(rate, _primitive_scale(tree["child"], intervals))
-    return rate
-
-
 def _invariant_classifiers(part: Part, trees: tuple[dict[str, Any], ...]) -> bool:
     """Prove classifier invariance under a common authored rotation axis.
 
@@ -229,7 +214,6 @@ class MaterialSurfaces:
         import jax.numpy as jnp
         import numpy as np
 
-        from software_defined_matter.sdf.bbox import build_param_intervals
         from software_defined_matter.sdf.lipschitz import infer_sdf_max_rate
 
         kin = self.membership.kinematics
@@ -298,9 +282,7 @@ class MaterialSurfaces:
             infer_sdf_max_rate(t, self._part, mode="values", domain=rest_domain)
             for t in self._trees
         ]
-        intervals = build_param_intervals(self._part, mode="values")
-        primitive_scale = max(_primitive_scale(t, intervals) for t in self._trees)
-        rest_rate = max(tree_rates) * primitive_scale * 2 * (1 + 1e-5)
+        rest_rate = max(tree_rates) * 2 * (1 + 1e-5)
         rate = rest_rate * max(rates)
         if not math.isfinite(rate) or rate <= 0:
             raise ValueError("Surface finding requires finite positive field-rate bounds")

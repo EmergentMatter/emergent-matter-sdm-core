@@ -174,6 +174,18 @@ vec2 op_repeat_finite2(vec2 p, float c, vec2 l) {
 vec3 op_elongate3(vec3 p, vec3 h) { return p - clamp(p, -h, h); }
 vec2 op_elongate2(vec2 p, vec2 h) { return p - clamp(p, -h, h); }
 
+// Quilez's exact core term, mirroring ops.op_elongate: inside the stretched
+// core the child sees its own origin, so add how far p is inside the core,
+// only where the child's value d is negative.
+float op_elongate_finish3(float d, vec3 p, vec3 h) {
+    vec3 e = abs(p) - h;
+    return d + ((d < 0.0) ? min(max(e.x, max(e.y, e.z)), 0.0) : 0.0);
+}
+float op_elongate_finish2(float d, vec2 p, vec2 h) {
+    vec2 e = abs(p) - h;
+    return d + ((d < 0.0) ? min(max(e.x, e.y), 0.0) : 0.0);
+}
+
 
 // ===========================================================================
 // Deformations (also point reshuffles; child(...) is called by the scene)
@@ -418,16 +430,26 @@ float sdf_screw_thread(vec3 p, float r_root, float depth, float pitch,
                        float handedness, float flank_deg) {
     // Truncated-V helical thread. Mirrors sdf_shapes.screw_thread term for term.
     float r = length(p.xy);
-    float u = p.z - handedness * pitch * (atan(p.y, p.x) - phase) / 6.28318530717958647;
+    float theta = (r > 0.0) ? atan(p.y, p.x) : 0.0;
+    float u = p.z - handedness * pitch * (theta - phase) / 6.28318530717958647;
     u = u - pitch * floor(u / pitch + 0.5);
-    float lead = 6.28318530717958647 * max(r, 1e-6);
+    float lead = 6.28318530717958647 * r;
     u = u * lead / sqrt(lead * lead + pitch * pitch);
 
     float s = r - r_root;
     float half_w = 0.5 * width;
     float a = radians(0.5 * flank_deg);
 
-    float d = max(-s, sin(a) * s + cos(a) * (abs(u) - half_w));
+    // A winning flank must satisfy (1 + sin(a)) (r_root-r) <= cos(a) pi r.
+    // Below r_lo the root wins, independently of tooth depth. Mirrors the
+    // proof and k_flank in sdf_shapes.screw_thread.
+    float h_axial = pitch / 6.28318530717958647;
+    float r_lo = r_root * (1.0 + sin(a)) / (1.0 + sin(a) + 3.141592653589793 * cos(a));
+    float ratio = abs(h_axial) / sqrt(r_lo * r_lo + h_axial * h_axial);
+    float climb = sin(a) + cos(a) * 3.141592653589793 * ratio * ratio * ratio;
+    float k_flank = max(1.0, sqrt(climb * climb + cos(a) * cos(a)));
+
+    float d = max(-s, (sin(a) * s + cos(a) * (abs(u) - half_w)) / k_flank);
     d = max(d, s - depth);
     return max(d, abs(p.z) - 0.5 * n_turns * abs(pitch));
 }
@@ -451,8 +473,12 @@ float sdf_cone(vec3 p, vec2 c, float h) {
 }
 
 float sdf_plane(vec3 p, vec3 n, float h) {
-    // Python: sum(p * n, axis=-1) + h  ==  dot(p, n) + h
-    return dot(p, n) + h;
+    // Rescale before squaring: a representable normal can have a squared
+    // length that underflows or overflows. Mirror sdf_shapes.plane.
+    float scale = max(max(abs(n.x), abs(n.y)), abs(n.z));
+    if (scale == 0.0) return h / 1e-30;
+    vec3 scaled_n = n / scale;
+    return (dot(p, scaled_n) + h / scale) / length(scaled_n);
 }
 
 float sdf_hex_prism(vec3 p, vec2 h) {
@@ -556,27 +582,26 @@ float sdf_octahedron(vec3 p, float s) {
 }
 
 float sdf_pyramid(vec3 p, float h) {
-    // NB: mirrors the existing Python in sdf_shapes.pyramid; the formula
-    // does not consume `d2`, matching the Python source (potential bug there,
-    // preserved here so the parity test stays exact).
+    // Port of sdf_shapes.pyramid: Quilez's sdPyramid for the four slanted
+    // faces, then the nearer of that and the base square (#30), with his sign.
     float m2 = h * h + 0.25;
     float px = abs(p.x);
     float py = p.y;
     float pz = abs(p.z);
-    float px2 = (pz > px) ? pz : px;
-    float pz2 = (pz > px) ? px : pz;
-    float dx = px2 - 0.5;
-    float dz = pz2 - 0.5;
-    float ind = (max(dx, dz) < 0.0) ? -1.0 : 1.0;
-    float dx2 = (dx > dz) ? dx : dz;
-    float dz2 = (dx > dz) ? dz : dx;
-    float px3 = px2 - clamp(px2, 0.0, 0.5);
-    float pz3 = pz2 - clamp(pz2, 0.0, 0.5);
-    float d1 = sqrt(px3 * px3 + pz3 * pz3) * ind;
-    // d2 deliberately computed and discarded to match Python.
-    float d2 = (h * py - 0.5 * dx2 + m2 * clamp((h * py + 0.5 * dx2) / m2, 0.0, 1.0)) / sqrt(m2);
-    float py_min = min(py, 0.0);
-    return sqrt(max(d1 * d1 + py_min * py_min, 0.0));
+    bool swap_xz = pz > px;
+    float sx = (swap_xz ? pz : px) - 0.5;
+    float sz = (swap_xz ? px : pz) - 0.5;
+    float qx = sz;
+    float qy = h * py - 0.5 * sx;
+    float qz = h * sx + 0.5 * py;
+    float s = max(-qx, 0.0);
+    float t = clamp((qy - 0.5 * sz) / (m2 + 0.25), 0.0, 1.0);
+    float a = m2 * (qx + s) * (qx + s) + qy * qy;
+    float b = m2 * (qx + 0.5 * t) * (qx + 0.5 * t) + (qy - m2 * t) * (qy - m2 * t);
+    float d2 = (min(qy, -qx * m2 - qy * 0.5) > 0.0) ? 0.0 : min(a, b);
+    float d_slant = sqrt(max((d2 + qz * qz) / m2, 0.0));
+    float d_base = length(vec3(max(px - 0.5, 0.0), py, max(pz - 0.5, 0.0)));
+    return min(d_slant, d_base) * sign(max(qz, -py));
 }
 
 

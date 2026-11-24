@@ -19,6 +19,7 @@ the shape convention documented in
 
 import math
 
+import jax
 import jax.numpy as jnp
 
 from software_defined_matter.sdf._helpers import (
@@ -216,8 +217,8 @@ def screw_thread(
     n_turns    : band spans ``|z| <= n_turns*|pitch|/2``, cut flat
     phase      : azimuth of the tooth at z=0 — the clocking knob
     handedness : ``+1`` right-handed, ``-1`` left
-    flank_deg  : INCLUDED flank angle. 60 is the ISO metric form, 55 Whitworth,
-                 29 ACME.
+    flank_deg  : INCLUDED flank angle in [0, 180] degrees. 60 is the ISO metric
+                 form, 55 Whitworth, 29 ACME.
 
     Union it onto a ``capped_cylinder`` of ``r_root`` for an external thread;
     subtract a dilated copy for the mating internal one.
@@ -235,7 +236,12 @@ def screw_thread(
     profile, an under-estimate outside its corners, which is the safe direction
     for a sphere tracer). ``u`` is rescaled by cos(lead angle) as in :func:`helix`. The
     tooth-to-tooth fold leaves a C0 crease midway between teeth, ordinary for a
-    repeated domain; ``|grad|`` stays <= 1, so ray-marching is safe.
+    repeated domain.
+
+    The flank term is divided by ``k_flank`` (see the body), so ``|grad|`` stays
+    <= 1 for positive root radius, depth, width, nonzero pitch and handedness
+    +/-1. Coarse leads pay for it by under-reporting at the flanks. The divisor
+    approaches 1 as the pitch becomes small relative to the root radius.
     """
     pz = p[..., 2]
     r = _length(p[..., :2])
@@ -248,15 +254,38 @@ def screw_thread(
 
     # cos(lead angle) at this radius: turns the axial offset into a true
     # perpendicular offset from the tooth's helical run.
-    lead = 2.0 * jnp.pi * jnp.maximum(r, 1e-6)
+    lead = 2.0 * jnp.pi * r
     u = u * lead / jnp.sqrt(lead**2 + pitch**2)
 
     s = r - r_root
     half = 0.5 * width
     a = jnp.radians(0.5 * flank_deg)  # flank angle from the radial direction
 
+    # cos(lead) taken at the query's own radius cancels the azimuthal stretch
+    # exactly: with c = r / sqrt(r^2 + h^2), c^2 (1 + h^2 / r^2) = 1. But c
+    # varies with r, so the flank also climbs radially by cos(a) * u * dc/dr,
+    # with |u| <= |pitch| / 2 before rescaling. Also |u| c <= pi r, since
+    # c <= r / |h|. If the divided flank F/K wins over the root R-r in the
+    # bore, K >= 1 and width >= 0 imply
+    #   (1 + sin(a)) (R-r) <= cos(a) pi r.
+    # Thus it can only win for r >= r_lo below, independently of tooth depth.
+    # dc/dr decreases with r, so evaluating it at r_lo bounds the flank's
+    # radial climb everywhere it can win. The other terms are unit-rate.
+    # No radius floor is needed: pitch != 0 keeps c finite at the axis and
+    # c(0) = 0 removes the azimuth dependence there.
+    h_axial = pitch / (2.0 * jnp.pi)
+    r_lo = r_root * (1.0 + jnp.sin(a)) / (1.0 + jnp.sin(a) + jnp.pi * jnp.cos(a))
+    # |pitch| dc/dr / 2 = pi (|h| / sqrt(r_lo^2 + h^2))^3.
+    # This dimensionless form avoids a large inverse-length intermediate.
+    ratio = jnp.abs(h_axial) / jnp.sqrt(r_lo**2 + h_axial**2)
+    k_flank = jnp.maximum(
+        1.0,
+        jnp.sqrt((jnp.sin(a) + jnp.cos(a) * jnp.pi * ratio**3) ** 2 + jnp.cos(a) ** 2),
+    )
+
     # Truncated triangle: root plane, the two symmetric flanks, crest cut.
-    d = jnp.maximum(-s, jnp.sin(a) * s + jnp.cos(a) * (jnp.abs(u) - half))
+    flank = (jnp.sin(a) * s + jnp.cos(a) * (jnp.abs(u) - half)) / k_flank
+    d = jnp.maximum(-s, flank)
     d = jnp.maximum(d, s - depth)
 
     half_h = 0.5 * n_turns * jnp.abs(pitch)
@@ -285,11 +314,30 @@ def cone(p, c, h):
 
 
 def plane(p, n, h):
-    """Exact SDF for an infinite plane. n must be normalised."""
+    """Exact SDF for the plane ``dot(p, n) + h = 0``, for a normal of any length.
+
+    Rescale the equation by the largest normal component before taking its
+    norm. Squaring the authored normal directly can underflow or overflow
+    even when the normal and the resulting distance are representable.
+    A zero normal has no plane and retains the constant ``h / 1e-30`` fallback.
+    Subnormal components may flush to zero in float32.
+    """
     p = jnp.asarray(p)
     n = jnp.asarray(n)
     _check_axis_vector("plane.n", n, p)
-    return jnp.sum(p * n, axis=-1) + h
+    magnitude = jnp.max(jnp.abs(n), axis=-1)
+    # This common rescaling cancels algebraically. Stopping its derivative
+    # avoids forming inverse-square terms at tiny normal magnitudes while
+    # preserving the derivatives of the normalized plane equation.
+    scale = jax.lax.stop_gradient(jnp.where(magnitude > 0.0, magnitude, 1.0))
+    # Keep XLA from rewriting sum((n / scale)**2) as sum(n**2) / scale**2,
+    # which reintroduces the underflow this rescaling is intended to avoid.
+    scaled_n = jax.lax.optimization_barrier(n / scale[..., None])
+    norm = _length(scaled_n)
+    safe_norm = jnp.where(magnitude > 0.0, norm, 1.0)
+    distance = (jnp.sum(p * scaled_n, axis=-1) + h / scale) / safe_norm
+    zero_value = jnp.where(magnitude > 0.0, 0.0, h) / 1e-30
+    return jnp.where(magnitude > 0.0, distance, zero_value)
 
 
 def hex_prism(p, h):
@@ -480,10 +528,23 @@ def pyramid(p, h):
     b = m2 * (qx + 0.5 * t) ** 2 + (qy - m2 * t) ** 2
     d2 = jnp.where(jnp.minimum(qy, -qx * m2 - qy * 0.5) > 0.0, 0.0, jnp.minimum(a, b))
 
+    # IQ's expression measures to the four slanted faces only. Below the base it
+    # reported the farther slanted faces, and just inside it the depth to a
+    # slanted face, so the value jumped by ~0.95 across the base plane (#30).
+    # The base square is the fifth face: take the nearer of the two.
+    d_slant = _sqrt_safe(jnp.maximum((d2 + qz**2) / m2, 0.0))
+    base = jnp.stack(
+        [
+            jnp.maximum(jnp.abs(p[..., 0]) - 0.5, 0.0),
+            py,
+            jnp.maximum(jnp.abs(p[..., 2]) - 0.5, 0.0),
+        ],
+        axis=-1,
+    )
     # The trailing sign is what gives the solid a negative interior; the previous
     # port dropped it (and left the result clamped to >= 0), so the field was
     # single-signed and not a valid SDF.
-    return jnp.sqrt(jnp.maximum((d2 + qz**2) / m2, 0.0)) * _sign(jnp.maximum(qz, -py))
+    return jnp.minimum(d_slant, _length(base)) * _sign(jnp.maximum(qz, -py))
 
 
 # ===========================================================================

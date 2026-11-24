@@ -1460,7 +1460,10 @@ class _GLSLEmitter:
             body = [f"return op_onion({child_fn}(p), {t_expr});"]
         elif name == "elongate":
             h_expr = self._emit_value(kwargs["h"], f"vec{dim}")
-            body = [f"vec{dim} q = op_elongate{dim}(p, {h_expr});", f"return {child_fn}(q);"]
+            body = [
+                f"vec{dim} q = op_elongate{dim}(p, {h_expr});",
+                f"return op_elongate_finish{dim}({child_fn}(q), p, {h_expr});",
+            ]
         else:
             raise ValueError(f"Unknown modifier {name!r}")
 

@@ -403,6 +403,47 @@ STRESS_VARIANTS.update(
             ),
         ],
         "screw_thread": [
+            (
+                {
+                    "r_root": 2.0,
+                    "depth": 0.1,
+                    "pitch": 12.0,
+                    "width": 1.0,
+                    "n_turns": 2.0,
+                    "phase": 0.0,
+                    "handedness": 1.0,
+                    "flank_deg": 60.0,
+                },
+                4.5,
+            ),
+            # A coarse lead, where cos(lead) varying with radius made the flank
+            # climb 1.35x near the surface and 2.09x in the bore (#36).
+            (
+                {
+                    "r_root": 2.0,
+                    "depth": 1.5,
+                    "pitch": 12.0,
+                    "width": 5.0,
+                    "n_turns": 2.0,
+                    "phase": 0.0,
+                    "handedness": 1.0,
+                    "flank_deg": 60.0,
+                },
+                4.5,
+            ),
+            (
+                {
+                    "r_root": 3.0,
+                    "depth": 1.5,
+                    "pitch": 6.0,
+                    "width": 3.0,
+                    "n_turns": 3.0,
+                    "phase": 0.0,
+                    "handedness": 1.0,
+                    "flank_deg": 60.0,
+                },
+                5.5,
+            ),
             # The spherical-bearing cap thread from test_sdf_screw_thread.py.
             (
                 {
@@ -441,19 +482,11 @@ STRESS_VARIANTS.update(
 # --- Known primitive failures, by name, each with its cause -----------------
 
 # Primitives known to over-report near the surface, with the cause. Empty since
-# #108 closed. ``test_known_over_reporting_list_is_current`` fails if an entry
-# here has actually been fixed, so the list cannot rot; add to it only to record
-# a defect that is genuinely still open.
-KNOWN_OVER_REPORTING: dict[str, str] = {
-    "plane": "dot(p, n) + h with n as authored: changes by |n| per unit (#31)",
-}
-
-# Of the above, those whose rate depends on a parameter rather than on the kind.
-# ``infer_sdf_max_rate`` cannot list them in its per-kind table, so they are
-# excused from matching it; its module docstring states each one instead.
-PARAMETER_DEPENDENT_RATE: dict[str, str] = {
-    "plane": "exact for a unit normal; the rate is |n| (#31)",
-}
+# #36 made ``plane`` exact for a normal of any length. The
+# ``test_known_over_reporting_list_is_current`` check fails if an entry here has
+# actually been fixed, so the list cannot rot; add to it only to record a defect
+# that is genuinely still open.
+KNOWN_OVER_REPORTING: dict[str, str] = {}
 
 # Primitives that are correct at the surface but knowingly over-report
 # elsewhere, with the reason. Exempt from the whole-domain check only.
@@ -478,7 +511,6 @@ KNOWN_BOUNDS: dict[str, str] = {
 # the primitive and ``test_known_value_jumps_list_is_current`` fails until the
 # entry here, and its rate declaration in ``sdf/lipschitz.py``, are deleted.
 KNOWN_VALUE_JUMPS: dict[str, str] = {
-    "pyramid": "measures to the slanted faces only, never to the base square (#30)",
     "helix": "on its own axis the value depends on the approach azimuth; see KNOWN_BOUNDS",
 }
 
@@ -498,6 +530,7 @@ KNOWN_UNDER_REPORTING: dict[str, str] = {
     "serpentine": "divided by the steepest centreline slope, so slow where it is flatter (#40)",
     "helix":      "the k_wall divisor that holds the wall rate to 1 at steep lead; see "
                   "KNOWN_BOUNDS",
+    "screw_thread": "the k_flank divisor that holds the rate to 1 at coarse lead",
 }
 
 # Primitives whose value is not a distance on the named side(s) of the surface:
@@ -511,10 +544,9 @@ KNOWN_NOT_DISTANCES: dict[str, tuple[frozenset[str], str]] = {
     "annular_sector": (_OUTSIDE, "max of half-spaces: short near its edges outside (#38)"),
     "tri_prism":      (_OUTSIDE, "max of half-spaces: short near its edges outside (#38)"),
     "notch_hinge":    (_OUTSIDE, "box minus two cylinders: short near the notch rims (#38)"),
-    "screw_thread":   (_OUTSIDE, "max of half-planes in the tooth frame: short near the "
-                                 "tooth corners (#38)"),
+    "screw_thread":   (_BOTH, "max of half-planes in the tooth frame, short near the tooth "
+                              "corners (#38); and the k_flank divisor, short at the flanks"),
     "box_frame":      (_INSIDE, "union of three edge boxes: min is short inside (#37)"),
-    "plane":          (_BOTH, "a non-unit normal scales the value by |n| (#31)"),
 }
 
 # Primitives with a non-finite value or gradient, on random samples or on the
@@ -816,7 +848,6 @@ def test_primitive_tables_name_real_primitives():
         KNOWN_OVER_REPORTING,
         KNOWN_BOUNDS,
         KNOWN_VALUE_JUMPS,
-        PARAMETER_DEPENDENT_RATE,
         KNOWN_UNDER_REPORTING,
         KNOWN_NOT_DISTANCES,
         KNOWN_NONFINITE,
@@ -844,8 +875,7 @@ def test_rate_declarations_match_the_audit_exceptions():
     from software_defined_matter.sdf.lipschitz import _PRIMITIVES_WITHOUT_UNIT_RATE
 
     sampled = {c[1] for c in _SAMPLED_CASES}
-    over = set(KNOWN_OVER_REPORTING) - set(PARAMETER_DEPENDENT_RATE)
-    exempt = set(KNOWN_BOUNDS) | over | sampled
+    exempt = set(KNOWN_BOUNDS) | set(KNOWN_OVER_REPORTING) | sampled
     assert set(_PRIMITIVES_WITHOUT_UNIT_RATE) == exempt | set(KNOWN_VALUE_JUMPS)
     assert set(_PRIMITIVES_WITHOUT_UNIT_RATE) <= set(_PRIMITIVES)
 
@@ -1074,7 +1104,6 @@ OP_KNOWN_NOT_DISTANCES: dict[str, tuple[frozenset[str], str]] = {
     "subtract-corner-sphere-from-box": (_OUTSIDE, "box-sphere seam has no closed form (#37)"),
     "round-intersect":                 (_OUTSIDE, "rounding an intersection grows its edges "
                                                   "(#37)"),
-    "elongate-three-axes":             (_INSIDE, "flat interior plateau (#36)"),
     "onion-ellipsoid":                 (_BOTH, "inherits the ellipsoid's scaled field (#40)"),
     "scale_axis":                      (_BOTH, "per-axis scale has no exact form (#37)"),
     "smooth_union":                    (_BOTH, "blend region (#37)"),

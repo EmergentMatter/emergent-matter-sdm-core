@@ -221,12 +221,25 @@ def op_onion(d, thickness):
 
 
 def op_elongate(sdf_fn, p, h):
-    """Elongate a primitive along each axis by h = [hx, hy, hz]."""
+    """Elongate a primitive along each axis by h = [hx, hy, hz].
+
+    Inside the stretched core (``|p_i| < h_i`` on every axis) the query maps to
+    the child's origin, so the child alone would report one constant depth
+    there: a sphere elongated by ``[2, 2, 2]`` read -0.5 at its centre against
+    a true -2.5. Quilez's exact form adds how far the query is inside the core,
+    ``min(max_i(|p_i| - h_i), 0)``. It is added only where the child's value is
+    negative, so a child whose origin is outside it (a torus) keeps its zero
+    set. For a child symmetric about its origin the result is exact; otherwise
+    it is a lower bound, since the core is the box ``[-h, h]`` grown by the ball
+    of radius ``-child(0)`` that the child contains.
+    """
     p = jnp.asarray(p)
     h = jnp.asarray(h)
     _check_axis_vector("op_elongate.h", h, p)
     q = p - _clamp(p, -h, h)
-    return sdf_fn(q)
+    d = sdf_fn(q)
+    core = jnp.minimum(jnp.max(jnp.abs(p) - h, axis=-1), 0.0)
+    return d + jnp.where(d < 0.0, core, 0.0)
 
 
 # ===========================================================================

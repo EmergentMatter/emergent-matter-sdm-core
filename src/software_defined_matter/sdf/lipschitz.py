@@ -76,7 +76,6 @@ _PRIMITIVE_RATE = 1.0
 #: exempts cannot report a unit rate, and an entry no longer needed fails there.
 _PRIMITIVES_WITHOUT_UNIT_RATE: dict[str, str] = {
     "helix": "its value jumps across its own axis, so no finite rate holds there",
-    "pyramid": "its value jumps across its own base plane, so no finite rate holds there",
     "raster_field": "a sampled field's rate follows its samples, not a universal unit",
 }
 
@@ -146,8 +145,10 @@ def _node_rate(node: Any, intervals: dict[str, Interval], domain: BBox | None) -
 
     if node_type == "modifier":
         # `round` subtracts a constant, `onion` takes abs() and subtracts one.
-        # Neither changes how fast the value moves.
-        return _node_rate(node["child"], intervals, domain)
+        # Neither changes how fast the value moves. `elongate` adds a unit-rate
+        # term inside its core, where the child's value is constant.
+        child = _node_rate(node["child"], intervals, domain)
+        return max(child, 1.0) if node.get("modifier") == "elongate" else child
 
     if node_type == "2d_to_3d":
         # revolution maps p -> (|p.xy|, p.z) and extrusion combines the profile

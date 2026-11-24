@@ -28,6 +28,7 @@ import inspect
 import os
 import re
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -40,6 +41,7 @@ from software_defined_matter import (
     make_param_ref,
     sdf_2d_to_3d,
     sdf_deform,
+    sdf_modifier,
     sdf_op,
     sdf_primitive,
     sdf_sweep,
@@ -978,6 +980,36 @@ def test_endpoint_distance_branches_match_in_executed_glsl(shader_runtime, dim, 
     np.testing.assert_allclose(values, _compiled(tree, points), atol=2e-6, rtol=0.0)
 
 
+def test_shallow_thread_bore_bound_and_axis_are_finite_in_glsl(shader_runtime):
+    tree = sdf_primitive(
+        "screw_thread",
+        r_root=2.0,
+        depth=0.1,
+        pitch=12.0,
+        width=1.0,
+        n_turns=2.0,
+        phase=0.0,
+        handedness=1.0,
+        flank_deg=60.0,
+    )
+    point = np.array([-0.6530567, 0.8484198, -1.711034], dtype=np.float32)
+    step = 1e-3
+    offsets = step * np.eye(3, dtype=np.float32)
+    probes = np.concatenate(
+        [
+            point + offsets,
+            point - offsets,
+            np.array([[0.0, 0.0, 0.0], [0.0, 0.0, 6.0]], dtype=np.float32),
+        ]
+    )
+    values = shader_runtime.evaluate(emit_glsl(_part(tree)), probes)[:, 3]
+    assert np.isfinite(values).all()
+    np.testing.assert_allclose(values, _compiled(tree, probes), atol=2e-6, rtol=0.0)
+    gradient = (values[:3] - values[3:6]) / (2 * step)
+    # The finite difference amplifies float32 shader rounding by 1 / step.
+    assert np.linalg.norm(gradient) <= 1.0 + 2e-3
+
+
 # Nodes whose values #36 changed, executed in the shader
 # ---------------------------------------------------------------------------
 # Each of these changed its VALUE (not its surface) in both evaluators: a
@@ -992,11 +1024,26 @@ def _sq(s):
 
 # fmt: off
 _REVALUED = {
+    "pyramid": (sdf_primitive("pyramid", h=1.5), 2.5),
+    "plane-non-unit-normal": (
+        sdf_op("intersect", [sdf_primitive("box", b=[2.0, 2.0, 2.0]),
+                             sdf_primitive("plane", n=[0.0, 0.0, 3.0], h=-1.5)]), 3.0),
     "smooth_union-k0": (
         sdf_op("smooth_union", [sdf_primitive("sphere", r=1.0),
                                 sdf_primitive("box", b=[0.8, 0.8, 0.8])], k=0.0), 2.0),
     "capsule-a-equals-b": (
         sdf_primitive("capsule", a=[0.5, 0.0, 0.0], b=[0.5, 0.0, 0.0], r=1.0), 2.5),
+    "elongate-3d": (
+        sdf_modifier("elongate", sdf_primitive("sphere", r=0.5), h=[1.5, 1.0, 0.5]), 3.0),
+    "elongate-2d": (
+        sdf_2d_to_3d("extrusion", sdf_modifier("elongate", sdf_primitive("circle_2d", r=0.5),
+                                               h=[1.5, 1.0]), h=0.7), 3.0),
+    "screw_thread-coarse": (
+        sdf_primitive("screw_thread", r_root=2.0, depth=1.5, pitch=12.0, width=5.0,
+                      n_turns=2.0, phase=0.0, handedness=1.0, flank_deg=60.0), 4.5),
+    "screw_thread-shallow-coarse": (
+        sdf_primitive("screw_thread", r_root=2.0, depth=0.1, pitch=12.0, width=1.0,
+                      n_turns=2.0, phase=0.0, handedness=1.0, flank_deg=60.0), 4.5),
 }
 # fmt: on
 
@@ -1017,3 +1064,33 @@ def test_emitted_scene_matches_jax_where_36_changed_the_value(shader_runtime, na
     # float32 on both sides; values are O(1), and the shader's sqrt and
     # division round differently from XLA's by a few ulps.
     np.testing.assert_allclose(glsl, jax_values, atol=2e-5)
+
+
+@pytest.mark.parametrize("scale", [1e-35, 1e-31, 1e-22, 1e-20, 1e-18, 1.0, 1e20, 1e35])
+@pytest.mark.parametrize("live", [False, True], ids=["literal", "uniform"])
+@pytest.mark.parametrize("direction", [[1, 0, 0], [1, -2, 2]], ids=["axis", "oblique"])
+def test_plane_normal_rescaling_matches_executed_glsl(shader_runtime, scale, live, direction):
+    authored = dict(
+        zip(["nx", "ny", "nz", "h"], [scale * c for c in direction] + [-0.75 * scale], strict=True)
+    )
+    leaves = {name: {"$ref": name} if live else value for name, value in authored.items()}
+    tree = sdf_primitive("plane", n=[leaves[k] for k in ("nx", "ny", "nz")], h=leaves["h"])
+    part = _part(tree)
+    if live:
+        part.params = {name: Param(name, value, free=True) for name, value in authored.items()}
+    points = np.array([[0, 0, 0], [1, 2, 3], [-2, 1, -1]], dtype=np.float32)
+    values = shader_runtime.evaluate(emit_glsl(part), points)[:, 3]
+    expected = (points @ np.array(direction) - 0.75) / np.linalg.norm(direction)
+    # Order-one distances: allow a few float32 ulps across XLA and Mesa.
+    np.testing.assert_allclose(values, expected, atol=2e-6, rtol=0)
+    with jax.enable_x64(False):
+        evaluated = jax.jit(make_sdf_closure(tree, part))(jnp.asarray(points))
+        assert evaluated.dtype == jnp.float32
+        np.testing.assert_allclose(values, np.asarray(evaluated), atol=2e-6, rtol=0)
+
+
+def test_zero_plane_normal_fallback_matches_executed_glsl(shader_runtime):
+    tree = sdf_primitive("plane", n=[0, 0, 0], h=1e-30)
+    points = np.array([[0, 0, 0], [1, 2, 3]], dtype=np.float32)
+    values = shader_runtime.evaluate(emit_glsl(_part(tree)), points)[:, 3]
+    np.testing.assert_allclose(values, 1, atol=2e-6, rtol=0)
