@@ -425,14 +425,17 @@ def capped_cone(p, h, r1, r2):
     return s * _sqrt_safe(jnp.minimum(_dot2(ca), _dot2(cb)))
 
 
-def solid_angle(p, c, ra):
-    """Exact SDF for a solid angle: a spherical cone of radius ``ra`` about +Z.
+def solid_angle(p, theta, ra):
+    """Exact SDF for a spherical sector of radius ``ra`` about +Z.
 
-    ``c`` is the half-angle as ``[sin, cos]``, measured from +Z. Only its
-    direction is used; it is normalised for the same reason as in
-    :func:`capped_torus`.
+    ``theta`` is the scalar half-angle in radians, strictly between zero
+    and pi. Its sine and cosine define the unit direction internally;
+    caller-supplied direction vectors are not supported.
     """
-    c = _unit(jnp.asarray(c))
+    theta = jnp.asarray(theta)
+    if theta.ndim != 0:
+        raise ValueError("solid_angle theta must be a scalar half-angle in radians")
+    c = jnp.stack([jnp.sin(theta), jnp.cos(theta)])
     q = jnp.stack([_length(p[..., :2]), p[..., 2]], axis=-1)
     l_dist = _length(q) - ra
     m = _length(q - c * _clamp(jnp.sum(q * c, axis=-1), 0.0, ra)[..., None])

@@ -557,8 +557,11 @@ def test_sdf_node_versions_match_their_schema_introduction():
                 f"{spec.name}: expected since={expected!r}, got {spec.since!r}"
             )
             for p in spec.params:
-                assert p.since == expected, (
-                    f"{spec.name}.{p.name}: expected since={expected!r}, got {p.since!r}"
+                param_version = (
+                    "0.8" if (spec.name, p.name) == ("solid_angle", "theta") else expected
+                )
+                assert p.since == param_version, (
+                    f"{spec.name}.{p.name}: expected since={param_version!r}, got {p.since!r}"
                 )
     for singleton in (wire.SWEEP, wire.LOFT):
         assert singleton.since == "0.1"

@@ -161,7 +161,7 @@ _PRIM_SPECS: dict[str, PrimSpec] = {
     "capped_cylinder":  PrimSpec(3, (("h", "float"), ("r", "float"))),
     "rounded_cylinder": PrimSpec(3, (("ra", "float"), ("rb", "float"), ("h", "float"))),
     "capped_cone":      PrimSpec(3, (("h", "float"), ("r1", "float"), ("r2", "float"))),
-    "solid_angle":      PrimSpec(3, (("c", "vec2"), ("ra", "float"))),
+    "solid_angle":      PrimSpec(3, (("theta", "float"), ("ra", "float"))),
     "cut_sphere":       PrimSpec(3, (("r", "float"), ("h", "float"))),
     "ellipsoid":        PrimSpec(3, (("r", "vec3"),)),
     "octahedron":       PrimSpec(3, (("s", "float"),)),
@@ -714,6 +714,8 @@ class _GLSLEmitter:
             return self._emit_polygon_2d(node)
 
         raw_kwargs = node.get("params") or {}
+        if kind == "solid_angle" and "c" in raw_kwargs:
+            raise ValueError("solid_angle requires theta in radians; c is not supported")
         arg_exprs: list[str] = []
         for arg_name, arg_type in spec.args:
             if arg_name not in raw_kwargs:

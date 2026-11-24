@@ -75,7 +75,7 @@ PRIMITIVES = {
     "capped_cylinder":  ({"h": 8.0, "r": 5.0}, 11.0),
     "rounded_cylinder": ({"ra": 5.0, "rb": 2.0, "h": 7.0}, 11.0),
     "capped_cone":      ({"h": 8.0, "r1": 8.0, "r2": 2.0}, 12.0),
-    "solid_angle":      ({"c": _sc(50), "ra": 9.0}, 12.0),
+    "solid_angle":      ({"theta": math.radians(50), "ra": 9.0}, 12.0),
     "cut_sphere":       ({"r": 8.0, "h": 0.0}, 11.0),
     "ellipsoid":        ({"r": [8.0, 5.0, 5.0]}, 11.0),
     "octahedron":       ({"s": 8.0}, 11.0),

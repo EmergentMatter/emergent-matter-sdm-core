@@ -1,11 +1,7 @@
-"""An angle given as a ``[sin, cos]`` vector means its direction, at any length.
+"""Capped-torus direction-vector magnitude must not change its field.
 
-``capped_torus(sc)`` and ``solid_angle(c)`` take such a vector as a free
-``vec2`` param, so an optimiser moves the two components independently and the
-vector leaves the unit circle on its first step. The field must not care:
-scaling the vector changes neither the surface nor the distance, in JAX or in
-the GLSL preview. (That ``capped_torus`` stays finite on its own centreline is
-pinned in ``tests/test_sdf_is_distance.py``.)
+Solid-angle apertures use scalar theta instead; their tests live in
+``test_sdf_solid_angle_theta.py``.
 """
 
 from __future__ import annotations
@@ -33,7 +29,6 @@ FLOAT32_ATOL = 2e-5
 # conftest table, so the shapes are the ones the mesh and distance audits see.
 CASES = [
     ("capped_torus", "sc", {"ra": 7.0, "rb": 2.2}, 120.0),
-    ("solid_angle", "c", {"ra": 9.0}, 50.0),
 ]
 IDS = [c[0] for c in CASES]
 

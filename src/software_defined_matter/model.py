@@ -28,7 +28,7 @@ from software_defined_matter.ports import Port, scalar_refs
 
 # The newest schema_version this package emits and validates against by
 # default. Distinct from the package's own version (0.3.0 today).
-LATEST_SCHEMA_VERSION = "0.7"
+LATEST_SCHEMA_VERSION = "0.8"
 
 # Fallback when a document's schema_version is missing or unrecognised.
 # 0.1's `schema_version` property is a permissive pattern rather than a
@@ -39,7 +39,7 @@ FALLBACK_SCHEMA_VERSION = "0.1"
 # Every version this package can load and validate. Absent `prior` /
 # `tolerance` means a delta at the authored value, so 0.1 and 0.2 documents
 # load unchanged; 0.3 is a pure superset.
-KNOWN_SCHEMA_VERSIONS = ("0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7")
+KNOWN_SCHEMA_VERSIONS = ("0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8")
 
 # Capability -> the schema_version that introduced it; min_schema_version_for
 # takes the newest entry among the capabilities a part actually uses.
@@ -56,6 +56,7 @@ _CAPABILITY_MIN_VERSION: dict[str, str] = {
     "shear_linear": "0.6",
     "taper_linear": "0.6",
     "scale_axis": "0.6",
+    "solid_angle": "0.8",
     # Any extension node: the kind itself is the extension's business, the node is the format's.
     "extension": "0.7",
     "param_expr": "0.3",
@@ -975,7 +976,7 @@ def _capabilities_used(part: Part) -> set[str]:
                 return
             if value.get("type") == "unop" and value.get("op") in {"sin", "cos"}:
                 used.add("trig_expr")
-            if value.get("kind") in {"raster_field", "axis_ramp", "radial_hermite"}:
+            if value.get("kind") in {"raster_field", "axis_ramp", "radial_hermite", "solid_angle"}:
                 used.add(value["kind"])
             if value.get("type") == "deform" and value.get("deform") in _CAPABILITY_MIN_VERSION:
                 used.add(value["deform"])
@@ -1032,6 +1033,33 @@ def min_schema_version_for(part: Part) -> str:
 def sdf_primitive(kind: str, **kwargs: Any) -> SDFTree:
     """Create a leaf node for a named primitive (e.g. ``sphere``, ``box``)."""
     return {"type": "primitive", "kind": kind, "params": kwargs}
+
+
+def sdf_solid_angle(theta: Any, ra: Any) -> SDFTree:
+    """Create a spherical sector about +Z with one angular design variable.
+
+    Args:
+        theta: Half-angle in radians, strictly between zero and pi. Accepts
+            a number, parameter reference, or scalar expression. Bound live
+            parameters within that interval when optimizing the aperture.
+        ra: Positive sphere radius, or a scalar expression for it.
+
+    The direction is derived as ``[sin(theta), cos(theta)]`` at evaluation
+    time, so optimization cannot change its length independently of its
+    angle. The scalar ``theta`` is stored directly, requiring schema 0.8
+    or later. Direction-vector inputs are not accepted.
+
+    Raises:
+        ValueError: A literal half-angle is outside the finite open interval
+            ``(0, pi)``. This builder does not evaluate expression domains.
+    """
+    import math
+
+    if isinstance(theta, (int, float)) and not 0.0 < theta < math.pi:
+        raise ValueError(f"solid_angle theta must be in (0, pi) radians, got {theta!r}")
+    if not isinstance(theta, (int, float, dict)):
+        raise ValueError("solid_angle theta must be a scalar half-angle or expression")
+    return sdf_primitive("solid_angle", theta=theta, ra=ra)
 
 
 def sdf_helix(
@@ -1396,6 +1424,7 @@ __all__ = [
     "sdf_deform",
     "sdf_helix",
     "sdf_screw_thread",
+    "sdf_solid_angle",
     "sdf_loft",
     "sdf_modifier",
     "sdf_op",

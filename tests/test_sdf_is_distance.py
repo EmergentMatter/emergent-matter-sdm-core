@@ -468,13 +468,13 @@ STRESS_VARIANTS.update(
             ({"inner_r": 1.0, "outer_r": 3.0, "half_angle": 2.5, "height": 2.0}, 5.0),
         ],
         # Angle vectors twice unit length, as an optimiser leaves them: the
-        # conftest angles (120 and 50 deg) scaled by 2. Before normalisation,
-        # capped_torus gave NaN here and solid_angle measured rate 3.0.
+        # conftest capped-torus angle (120 deg) scaled by 2.
         "capped_torus": [
             ({"sc": [1.7320508, -1.0], "ra": 7.0, "rb": 2.2}, 11.0),
         ],
+        # The aperture is a scalar angle, with unit direction derived internally.
         "solid_angle": [
-            ({"c": [1.5320889, 1.2855752], "ra": 9.0}, 12.0),
+            ({"theta": 0.8726646259971648, "ra": 9.0}, 12.0),
         ],
     }
 )

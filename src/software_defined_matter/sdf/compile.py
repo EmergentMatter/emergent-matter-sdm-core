@@ -316,6 +316,8 @@ def _compile_primitive(node: dict[str, Any], binding: ParamBinding) -> SDFClosur
         return compile_raster_field(node)
     prim_fn = _PRIMITIVES[kind]
     raw_kwargs = _primitive_kwargs(node)
+    if kind == "solid_angle" and "c" in raw_kwargs:
+        raise ValueError("solid_angle requires theta in radians; c is not supported")
 
     def fn(p: jnp.ndarray, free_vec: jnp.ndarray) -> jnp.ndarray:
         resolved = resolve_param_kwargs(raw_kwargs, binding, free_vec)
