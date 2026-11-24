@@ -28,6 +28,7 @@ from software_defined_matter.sdf._helpers import (
     _dot2,
     _length,
     _sign,
+    _sqrt_safe,
     _unit,
 )
 from software_defined_matter.sdf.sdf_ops import op_subtract
@@ -280,7 +281,7 @@ def cone(p, c, h):
     k = _sign(q_vec[1])
     d = jnp.minimum(_dot2(a), _dot2(b))
     s = jnp.maximum(k * (w[..., 0] * q_vec[1] - w[..., 1] * q_vec[0]), k * (w[..., 1] - q_vec[1]))
-    return jnp.sqrt(d) * _sign(s)
+    return _sqrt_safe(d) * _sign(s)
 
 
 def plane(p, n, h):
@@ -328,14 +329,22 @@ def tri_prism(p, h):
 
 
 def capsule(p, a, b, r):
-    """Exact SDF for a capsule between points a and b with radius r."""
+    """Exact SDF for a capsule between points a and b with radius r.
+
+    Coincident endpoints evaluate as a sphere at a. Endpoint derivatives there
+    use the point-distance branch; independent endpoint motion is nonsmooth.
+    """
     p = jnp.asarray(p)
     a, b = jnp.asarray(a), jnp.asarray(b)
     _check_axis_vector("capsule.a", a, p)
     _check_axis_vector("capsule.b", b, p)
     pa = p - a
     ba = b - a
-    h = _clamp(jnp.sum(pa * ba, axis=-1) / _dot2(ba), 0.0, 1.0)
+    ba2 = _dot2(ba)
+    # A tiny denominator floor still overflows its reciprocal squared in
+    # float32 reverse-mode autodiff. At coincidence the numerator is zero,
+    # so a unit denominator gives the point-distance branch without that pole.
+    h = _clamp(jnp.sum(pa * ba, axis=-1) / jnp.where(ba2 > 0.0, ba2, 1.0), 0.0, 1.0)
     return _length(pa - ba * h[..., None]) - r
 
 
@@ -365,7 +374,7 @@ def capped_cone(p, h, r1, r2):
     )
     cb = q - k1 + k2 * _clamp(jnp.sum((k1 - q) * k2, axis=-1) / _dot2(k2), 0.0, 1.0)[..., None]
     s = jnp.where((cb[..., 0] < 0.0) & (ca[..., 1] < 0.0), -1.0, 1.0)
-    return s * jnp.sqrt(jnp.minimum(_dot2(ca), _dot2(cb)))
+    return s * _sqrt_safe(jnp.minimum(_dot2(ca), _dot2(cb)))
 
 
 def solid_angle(p, c, ra):
@@ -768,10 +777,16 @@ def rounded_box_2d(p, b, r):
 
 
 def segment_2d(p, a, b):
+    """Distance to a segment, using point distance at coincident endpoints.
+
+    As in :func:`capsule`, the degenerate branch differentiates through a.
+    """
     a, b = jnp.asarray(a), jnp.asarray(b)
     pa = p - a
     ba = b - a
-    h = _clamp(jnp.sum(pa * ba, axis=-1) / _dot2(ba), 0.0, 1.0)
+    ba2 = _dot2(ba)
+    # Match capsule's finite float32 point-distance branch.
+    h = _clamp(jnp.sum(pa * ba, axis=-1) / jnp.where(ba2 > 0.0, ba2, 1.0), 0.0, 1.0)
     return _length(pa - ba * h[..., None])
 
 
@@ -789,7 +804,7 @@ def trapezoid_2d(p, r1, r2, he):
     )
     cb = q - k1 + k2 * _clamp(jnp.sum((k1 - q) * k2, axis=-1) / _dot2(k2), 0.0, 1.0)[..., None]
     s = jnp.where((cb[..., 0] < 0.0) & (ca[..., 1] < 0.0), -1.0, 1.0)
-    return s * jnp.sqrt(jnp.minimum(_dot2(ca), _dot2(cb)))
+    return s * _sqrt_safe(jnp.minimum(_dot2(ca), _dot2(cb)))
 
 
 def uneven_capsule_2d(p, r1, r2, h):
@@ -866,7 +881,7 @@ def polygon_2d(p, vertices):
     inside = (jnp.sum(flip.astype(jnp.int32), axis=-1) % 2) == 1
     sign = jnp.where(inside, -1.0, 1.0)
 
-    return sign * jnp.sqrt(d)
+    return sign * _sqrt_safe(d)
 
 
 # ---------------------------------------------------------------------------

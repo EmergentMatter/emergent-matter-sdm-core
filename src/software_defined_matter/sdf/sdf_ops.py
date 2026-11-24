@@ -27,6 +27,7 @@ from software_defined_matter.sdf._helpers import (
     _clamp,
     _length,
     _mix,
+    _sqrt_safe,
     bezier_outline,
     bspline_outline,
 )
@@ -49,19 +50,31 @@ def op_intersect(d1, d2):
     return jnp.maximum(d1, d2)
 
 
+# The smooth booleans divide by ``k``. At ``k = 0`` they are the hard booleans;
+# without the guard ``(d2 - d1) / k`` is 0/0 wherever the children tie, and the
+# value is NaN. GLSL mirrors the guard.
+
+
+def _blend_k(k):
+    return jnp.where(k > 0.0, k, 1.0)
+
+
 def op_smooth_union(d1, d2, k):
-    h = _clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0)
-    return _mix(d2, d1, h) - k * h * (1.0 - h)
+    kk = _blend_k(k)
+    h = _clamp(0.5 + 0.5 * (d2 - d1) / kk, 0.0, 1.0)
+    return jnp.where(k > 0.0, _mix(d2, d1, h) - kk * h * (1.0 - h), jnp.minimum(d1, d2))
 
 
 def op_smooth_subtract(d1, d2, k):
-    h = _clamp(0.5 - 0.5 * (d2 + d1) / k, 0.0, 1.0)
-    return _mix(d1, -d2, h) + k * h * (1.0 - h)
+    kk = _blend_k(k)
+    h = _clamp(0.5 - 0.5 * (d2 + d1) / kk, 0.0, 1.0)
+    return jnp.where(k > 0.0, _mix(d1, -d2, h) + kk * h * (1.0 - h), jnp.maximum(d1, -d2))
 
 
 def op_smooth_intersect(d1, d2, k):
-    h = _clamp(0.5 - 0.5 * (d2 - d1) / k, 0.0, 1.0)
-    return _mix(d2, d1, h) + k * h * (1.0 - h)
+    kk = _blend_k(k)
+    h = _clamp(0.5 - 0.5 * (d2 - d1) / kk, 0.0, 1.0)
+    return jnp.where(k > 0.0, _mix(d2, d1, h) + kk * h * (1.0 - h), jnp.maximum(d1, d2))
 
 
 # ===========================================================================
@@ -285,7 +298,7 @@ def op_twist_radial(sdf_fn, p, r0, r1, a0, a1):
     Returns:
         jnp.ndarray: The child's distance at the mapped point.
     """
-    r = jnp.sqrt(p[..., 0] ** 2 + p[..., 1] ** 2)
+    r = _length(p[..., :2])
     w = _hermite_ramp(jnp.clip((r - r0) / (r1 - r0), 0.0, 1.0))
     return sdf_fn(_rotate_z(p, -(a0 + (a1 - a0) * w)))
 
@@ -659,9 +672,9 @@ def sweep(profile2d_fn, path_pts, p, closed=False, frame="rmf", normal0=None):
         flat = ((istar == 0) & (over_lo > 0.0)) | ((istar == n_seg - 1) & (over_hi > 0.0))
     d2d = profile2d_fn(_sweep_joint(jnp.stack([u, v], axis=-1), over, flat))
     d_ax = jnp.where(flat & (over > 0.0), over, jnp.full_like(over, -1.0e9))
-    return jnp.sqrt(jnp.maximum(d2d, 0.0) ** 2 + jnp.maximum(d_ax, 0.0) ** 2) + jnp.minimum(
-        jnp.maximum(d2d, d_ax), 0.0
-    )
+    return _length(
+        jnp.stack([jnp.maximum(d2d, 0.0), jnp.maximum(d_ax, 0.0)], axis=-1)
+    ) + jnp.minimum(jnp.maximum(d2d, d_ax), 0.0)
 
 
 def _sweep_joint(uv, over, flat):
@@ -793,7 +806,7 @@ def _poly_sdf_batched(p2d, v):
     c3 = (e[..., 0] * w[..., 1]) > (e[..., 1] * w[..., 0])
     flip = (c1 & c2 & c3) | (~c1 & ~c2 & ~c3)
     inside = (jnp.sum(flip.astype(jnp.int32), axis=-1) % 2) == 1
-    return jnp.where(inside, -1.0, 1.0) * jnp.sqrt(d)
+    return jnp.where(inside, -1.0, 1.0) * _sqrt_safe(d)
 
 
 def loft_shape(verts_sections, zs, p, smooth=False):

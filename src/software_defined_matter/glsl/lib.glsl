@@ -57,16 +57,21 @@ float op_subtract(float d1, float d2)  { return max(d1, -d2); }
 float op_intersect(float d1, float d2) { return max(d1, d2); }
 
 float op_smooth_union(float d1, float d2, float k) {
+    // k <= 0 is the hard boolean; dividing by it would give NaN where the
+    // children tie. Mirrors ops._blend_k.
+    if (k <= 0.0) return min(d1, d2);
     float h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0);
     return mix(d2, d1, h) - k * h * (1.0 - h);
 }
 
 float op_smooth_subtract(float d1, float d2, float k) {
+    if (k <= 0.0) return max(d1, -d2);
     float h = clamp(0.5 - 0.5 * (d2 + d1) / k, 0.0, 1.0);
     return mix(d1, -d2, h) + k * h * (1.0 - h);
 }
 
 float op_smooth_intersect(float d1, float d2, float k) {
+    if (k <= 0.0) return max(d1, d2);
     float h = clamp(0.5 - 0.5 * (d2 - d1) / k, 0.0, 1.0);
     return mix(d2, d1, h) + k * h * (1.0 - h);
 }
@@ -473,7 +478,9 @@ float sdf_tri_prism(vec3 p, vec2 h) {
 float sdf_capsule(vec3 p, vec3 a, vec3 b, float r) {
     vec3 pa = p - a;
     vec3 ba = b - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    float ba2 = dot(ba, ba);
+    // Match the JAX point-distance branch at coincident endpoints.
+    float h = clamp(dot(pa, ba) / ((ba2 > 0.0) ? ba2 : 1.0), 0.0, 1.0);
     return length(pa - ba * h) - r;
 }
 
@@ -735,7 +742,8 @@ float sdf_rounded_box_2d(vec2 p, vec2 b, float r) {
 float sdf_segment_2d(vec2 p, vec2 a, vec2 b) {
     vec2 pa = p - a;
     vec2 ba = b - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    float ba2 = dot(ba, ba);
+    float h = clamp(dot(pa, ba) / ((ba2 > 0.0) ? ba2 : 1.0), 0.0, 1.0);
     return length(pa - ba * h);
 }
 

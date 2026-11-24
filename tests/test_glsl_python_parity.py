@@ -38,7 +38,9 @@ from software_defined_matter import (
     Part,
     field_primitive,
     make_param_ref,
+    sdf_2d_to_3d,
     sdf_deform,
+    sdf_op,
     sdf_primitive,
     sdf_sweep,
     sdf_transform,
@@ -946,3 +948,72 @@ def test_the_tabled_sweep_is_the_field_the_compiled_sweep_evaluates(shader_runti
     np.testing.assert_allclose(glsl, _compiled(tree, pts), rtol=1e-5, atol=1e-5)
     executed = shader_runtime.evaluate(emission, pts.astype(np.float32))[:, 3]
     np.testing.assert_allclose(executed, _compiled(tree, pts), rtol=1e-5, atol=1e-5)
+
+
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("dim", [2, 3], ids=["segment_2d", "capsule"])
+@pytest.mark.parametrize("coincident", [False, True], ids=["separated", "coincident"])
+def test_endpoint_distance_branches_match_in_executed_glsl(shader_runtime, dim, coincident):
+    a = np.full(dim, 0.5, dtype=np.float32)
+    b = a.copy()
+    if not coincident:
+        b[0] += 1.0
+    if dim == 3:
+        tree = sdf_primitive("capsule", a=a.tolist(), b=b.tolist(), r=0.2)
+    else:
+        tree = sdf_2d_to_3d(
+            "extrusion", sdf_primitive("segment_2d", a=a.tolist(), b=b.tolist()), h=1.0
+        )
+    points = np.zeros((4, 3), dtype=np.float32)
+    points[:, :dim] = np.stack([a, a + 1.0, a - 0.25, (a + b) / 2])
+    delta = points[:, :dim] - a
+    if not coincident:
+        t = np.clip(delta @ (b - a) / np.dot(b - a, b - a), 0.0, 1.0)
+        delta = delta - t[:, None] * (b - a)
+    expected = np.linalg.norm(delta, axis=-1) - (0.2 if dim == 3 else 0.0)
+    values = shader_runtime.evaluate(emit_glsl(_part(tree)), points)[:, 3]
+    assert np.isfinite(values).all()
+    # Float32 norm evaluation can differ by a few ulps between XLA and GLSL.
+    np.testing.assert_allclose(values, expected, atol=2e-6, rtol=0.0)
+    np.testing.assert_allclose(values, _compiled(tree, points), atol=2e-6, rtol=0.0)
+
+
+# Nodes whose values #36 changed, executed in the shader
+# ---------------------------------------------------------------------------
+# Each of these changed its VALUE (not its surface) in both evaluators: a
+# divisor, a rescale, an extra term or a new face. A transcription test would
+# only pin one reading of lib.glsl, so these run the emitted scene through the
+# headless runtime and compare it with JAX directly.
+
+
+def _sq(s):
+    return [[-s, -s], [s, -s], [s, s], [-s, s]]
+
+
+# fmt: off
+_REVALUED = {
+    "smooth_union-k0": (
+        sdf_op("smooth_union", [sdf_primitive("sphere", r=1.0),
+                                sdf_primitive("box", b=[0.8, 0.8, 0.8])], k=0.0), 2.0),
+    "capsule-a-equals-b": (
+        sdf_primitive("capsule", a=[0.5, 0.0, 0.0], b=[0.5, 0.0, 0.0], r=1.0), 2.5),
+}
+# fmt: on
+
+
+@pytest.mark.parametrize("name", sorted(_REVALUED))
+def test_emitted_scene_matches_jax_where_36_changed_the_value(shader_runtime, name):
+    tree, half = _REVALUED[name]
+    part = Part(
+        name=f"{name} parity",
+        params={},
+        materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)],
+        metadata={"bbox": [[-half] * 3, [half] * 3]},
+    )
+    rng = np.random.default_rng(36)
+    pts = rng.uniform(-half, half, size=(4_000, 3)).astype(np.float32)
+    glsl = shader_runtime.evaluate(emit_glsl(part), pts)[:, 3]
+    jax_values = np.asarray(make_sdf_closure(tree, part)(jnp.asarray(pts), jnp.zeros((0,))))
+    # float32 on both sides; values are O(1), and the shader's sqrt and
+    # division round differently from XLA's by a few ulps.
+    np.testing.assert_allclose(glsl, jax_values, atol=2e-5)

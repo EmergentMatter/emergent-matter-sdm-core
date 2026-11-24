@@ -518,16 +518,9 @@ KNOWN_NOT_DISTANCES: dict[str, tuple[frozenset[str], str]] = {
 }
 
 # Primitives with a non-finite value or gradient, on random samples or on the
-# round-number grid. A bare sqrt of a squared distance that is exactly 0 on an
-# edge, face or cap (#36).
-KNOWN_NONFINITE: dict[str, str] = {
-    "polygon_2d":   "sqrt of the squared edge distance; NaN on an edge (#36)",
-    "bezier_2d":    "evaluated through polygon_2d (#36)",
-    "bspline_2d":   "evaluated through polygon_2d (#36)",
-    "trapezoid_2d": "sqrt of the squared distance; NaN on its boundary (#36)",
-    "cone":         "sqrt of the squared distance; NaN on its surface (#36)",
-    "capped_cone":  "sqrt of the squared distance; NaN on its caps (#36)",
-}
+# round-number grid. Empty since #36: a bare sqrt of a squared distance that is
+# exactly 0 on a surface is the usual cause, and ``_sqrt_safe`` the fix.
+KNOWN_NONFINITE: dict[str, str] = {}
 # fmt: on
 
 
@@ -737,6 +730,21 @@ def test_capped_torus_is_finite_on_its_centreline():
     inside_cap = np.abs(th) <= math.radians(120.0)
     np.testing.assert_allclose(np.asarray(values)[inside_cap], -rb, atol=FLOAT32_ATOL)
     assert bool(jnp.all(values >= -rb - FLOAT32_ATOL))
+
+
+def test_safe_norm_and_sqrt_have_finite_second_derivatives_at_zero():
+    """Reverse-over-reverse autodiff through ``_length`` and ``_sqrt_safe``
+    stays finite at zero (needed when differentiating a gradient-based metric
+    such as ``surface_area``)."""
+    from software_defined_matter.sdf._helpers import _length, _sqrt_safe
+
+    v0 = jnp.zeros(3, dtype=jnp.float32)
+    h_len = jax.grad(lambda v: jnp.sum(jax.grad(_length)(v)))(v0)
+    assert bool(jnp.all(jnp.isfinite(h_len)))
+
+    x0 = jnp.float32(0.0)
+    h_sqrt = jax.grad(jax.grad(_sqrt_safe))(x0)
+    assert bool(jnp.isfinite(h_sqrt))
 
 
 # --- The primitive tables stay current ---------------------------------------
@@ -1025,9 +1033,14 @@ _SWEEP_NAN = "sqrt of max(d2d, 0)**2 + max(d_ax, 0)**2, which is 0 at every inte
 # Over 1 near the surface, but bounded by ``infer_sdf_max_rate`` over an
 # evaluation domain: the stretch grows with distance from an axis, so no
 # constant inside the op can remove it. Exempt from the over-reporting check.
-OP_RATE_BOUNDED_BY_DOMAIN: dict[str, str] = dict.fromkeys(_WARPS, _WARP_STRETCH)
+OP_RATE_BOUNDED_BY_DOMAIN: dict[str, str] = {
+    **dict.fromkeys(_WARPS, _WARP_STRETCH),
+    "taper_linear-ramp": "s varies along Z, so space stretches more the further from the axis",
+}
 
 # Over 1 near the surface with no domain-dependent excuse.
+_BALL_JOINT = "ball joint stretches a non-circular profile (#42)"
+
 OP_KNOWN_OVER_REPORTING: dict[str, str] = {
     "shear_linear":          "not divided by the shear's largest singular value (#36)",
     "taper_linear-constant": "child(p / s) with no rescale: over by 1/s (#36)",
@@ -1053,6 +1066,7 @@ OP_KNOWN_UNDER_REPORTING: dict[str, str] = {
 }
 
 # Not a distance on the named side(s): the projection misses.
+# Safe sweep gradients expose swallowed joint surfaces inside as well as cap errors outside.
 OP_KNOWN_NOT_DISTANCES: dict[str, tuple[frozenset[str], str]] = {
     "union-overlapping-spheres":       (_INSIDE, "min measures to swallowed surface (#39)"),
     "mirror-overlapping":              (_INSIDE, "union with its reflection (#39)"),
@@ -1077,10 +1091,10 @@ OP_KNOWN_NOT_DISTANCES: dict[str, tuple[frozenset[str], str]] = {
     "loft_shape-taper":                (_BOTH, "interpolated sections (#36, #37)"),
     "sweep-circle-straight":           (_OUTSIDE, "inside the tube the value ignores the end "
                                                   "caps, where outside projections land (#36)"),
-    "sweep-circle-corner-90":          (_OUTSIDE, "inside the tube the value ignores the end "
+    "sweep-circle-corner-90":          (_BOTH, "inside the tube the value ignores the end "
                                                   "caps, where outside projections land (#36)"),
-    "sweep-box-corner-90":             (_OUTSIDE, "ball joint (#42), and the end caps (#36)"),
-    "sweep-box-corner-60":             (_OUTSIDE, "ball joint (#42), and the end caps (#36)"),
+    "sweep-box-corner-90":             (_BOTH, "ball joint (#42), and the end caps (#36)"),
+    "sweep-box-corner-60":             (_BOTH, "ball joint (#42), and the end caps (#36)"),
 }
 
 # Value jumps somewhere: the nearby-pair check (#32).
@@ -1090,13 +1104,8 @@ OP_KNOWN_VALUE_JUMPS: dict[str, str] = dict.fromkeys(
 )
 
 # Non-finite value or gradient, on random samples or on the round-number grid.
-OP_KNOWN_NONFINITE: dict[str, str] = {
-    **dict.fromkeys(_SWEEPS, _SWEEP_NAN),
-    "twist_radial":          "its radius bypasses _length; NaN on the Z axis (#36)",
-    "canonical_sector_fold": "atan2 without the _azimuth guard; NaN on the Z axis (#36)",
-    "extrusion":             "inherits polygon_2d's NaN on an edge (#36)",
-    "loft_shape-taper":      "_poly_sdf_batched's NaN on an edge (#36)",
-}
+# Empty since #36.
+OP_KNOWN_NONFINITE: dict[str, str] = {}
 # fmt: on
 
 
