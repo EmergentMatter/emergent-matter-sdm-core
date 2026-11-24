@@ -349,17 +349,27 @@ vec2 sdm_sweep_joint(vec2 uv, float over, bool end_cap) {
     return (n > 1e-9) ? uv * (m / n) : vec2(m, 0.0);
 }
 
-float sdm_sweep_finish(float d2d, float over) {
+float sdm_sweep_finish(float d2d, float cap) {
     // Combine the profile distance in the chosen segment's cross-section
-    // with a FLAT cap of axial overshoot `over`. Callers pass `over` only at
-    // a true open end of an open path (ops.sweep's `flat`, `end_cap` here,
-    // since `flat` is a reserved word in GLSL); everywhere else
-    // they pass 0 (an interior foot, or a ball joint already folded into the
-    // profile query by sdm_sweep_joint), so the cap sits at -1e9 and the
-    // profile alone governs. Same rounded-box combine as sdm_loft_cap.
-    float d_ax = (over > 0.0) ? over : -1.0e9;
-    vec2 w = vec2(d2d, d_ax);
+    // with the exterior overshoot past an open cap, or -1.0e9 otherwise.
+    // Interior distances to finite cap faces are applied by the caller,
+    // independently of the nearest segment. Mirrors ops.sweep's d_ax.
+    vec2 w = vec2(d2d, cap);
     return length(max(w, vec2(0.0))) + min(max(w.x, w.y), 0.0);
+}
+
+vec3 sdm_sweep_cap_query(vec3 p, vec3 origin, vec3 t, vec3 n, vec3 b) {
+    vec3 delta = p - origin;
+    return vec3(dot(delta, n), dot(delta, b), dot(delta, t));
+}
+
+float sdm_sweep_cap_distance(float profile, vec3 cap, float overshoot, float nearest) {
+    // Finite face intersected with the endpoint segment's nearest region.
+    // Half the difference of segment distances is a 1-Lipschitz bound on
+    // distance to that region. Mirrors the hidden-cap guard in ops.sweep.
+    float segment = length(vec3(cap.xy, overshoot));
+    float hidden = max(0.5 * (segment - nearest), 0.0);
+    return max(length(vec2(max(profile, 0.0), cap.z)), hidden);
 }
 
 
@@ -908,15 +918,16 @@ vec4 sdm_sweep_fetch(int i) {
 
 // The nearest-segment search of ops.sweep over a tabled path. Returns the
 // profile-plane coordinates (u, v) of the query on the chosen segment, with
-// an interior-vertex ball joint already applied, and the flat-cap overshoot
-// (nonzero only at a true open end); the caller evaluates its own profile
+// an interior-vertex ball joint already applied, and the exterior flat-cap
+// overshoot (-1.0e9 otherwise); the caller evaluates its own profile
 // at (u, v) and finishes with sdm_sweep_finish, because the profile is a
 // per-node function this library cannot name.
+// The fourth component is distance to the nearest segment, for cap exposure.
 //
 // The segment is chosen by true 3-D distance to the segment, NOT by the
 // profile value: a far segment whose tangent points at the query would
 // otherwise report "inside" (the phantom tube ops.sweep's docstring records).
-vec3 sdm_sweep_tab(vec3 p, int hdr) {
+vec4 sdm_sweep_tab(vec3 p, int hdr) {
     vec4 head = sdm_sweep_fetch(hdr);
     int n = int(head.x);
     bool closed = head.y > 0.5;
@@ -942,8 +953,9 @@ vec3 sdm_sweep_tab(vec3 p, int hdr) {
     float over_hi = s_star - l_star;
     float over = max(over_lo, over_hi);
     bool end_cap = !closed && ((istar == 0 && over_lo > 0.0) || (istar == n - 1 && over_hi > 0.0));
+    float cap = end_cap ? over : -1.0e9;
     vec2 uv = sdm_sweep_joint(vec2(dot(perp_star, nn), dot(perp_star, bb)), over, end_cap);
-    return vec3(uv, end_cap ? over : 0.0);
+    return vec4(uv, cap, sqrt(best));
 }
 #endif  // SDM_SWEEP_TABLE
 

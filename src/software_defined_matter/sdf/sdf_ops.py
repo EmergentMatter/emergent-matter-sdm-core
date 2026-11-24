@@ -673,6 +673,12 @@ def sweep(profile2d_fn, path_pts, p, closed=False, frame="rmf", normal0=None):
                    ignored for ``"cylindrical"``). Projected perpendicular to the
                    first tangent so a swept ribbon can start in a chosen
                    orientation (e.g. radial, to continue a winding's cross-section).
+
+    Interior end-cap distances are independent of the chosen segment. Each
+    finite cap face is restricted to the region where its endpoint segment is
+    nearest, so a cap hidden by another leg does not create an internal surface.
+    This restriction is a conservative distance bound, not an exact distance
+    to the clipped face. Straight paths retain exact cap depths after subdivision.
     """
     A, that, L, N, Bf = _sweep_frames(path_pts, closed, frame, normal0)
 
@@ -714,16 +720,39 @@ def sweep(profile2d_fn, path_pts, p, closed=False, frame="rmf", normal0=None):
     over_lo = -s_star
     over_hi = s_star - L[istar]
     over = jnp.maximum(over_lo, over_hi)  # >0 iff foot clamped
+    no_cap = jnp.full_like(over, -1.0e9)
     if closed:
         flat = jnp.zeros(over.shape, dtype=bool)
+        d_ax = no_cap
     else:
         n_seg = A.shape[0]
         flat = ((istar == 0) & (over_lo > 0.0)) | ((istar == n_seg - 1) & (over_hi > 0.0))
+        d_ax = jnp.where(flat, over, no_cap)
     d2d = profile2d_fn(_sweep_joint(jnp.stack([u, v], axis=-1), over, flat))
-    d_ax = jnp.where(flat & (over > 0.0), over, jnp.full_like(over, -1.0e9))
-    return _length(
-        jnp.stack([jnp.maximum(d2d, 0.0), jnp.maximum(d_ax, 0.0)], axis=-1)
-    ) + jnp.minimum(jnp.maximum(d2d, d_ax), 0.0)
+    outside = jnp.stack([jnp.maximum(d2d, 0.0), jnp.maximum(d_ax, 0.0)], axis=-1)
+    # _length, not a bare sqrt: both terms are 0 everywhere inside, where the
+    # derivative of sqrt is infinite and autodiff returned NaN.
+    d = _length(outside) + jnp.minimum(jnp.maximum(d2d, d_ax), 0.0)
+    if not closed:
+        # Interior cap distance must not depend on the winning segment. Measure
+        # to the filled profile in each endpoint plane, not the infinite plane:
+        # a bent path can cross a cap's plane far outside the actual cap face.
+        nearest = _length(jnp.take_along_axis(perp, istar[..., None, None], axis=-2)[..., 0, :])
+        for i, origin in ((0, A[0]), (-1, A[-1] + L[-1] * that[-1])):
+            delta = p - origin
+            uv = jnp.stack(
+                [jnp.sum(delta * N[i], axis=-1), jnp.sum(delta * Bf[i], axis=-1)], axis=-1
+            )
+            axial = jnp.sum(delta * that[i], axis=-1)
+            cap_distance = _length(jnp.stack([jnp.maximum(profile2d_fn(uv), 0.0), axial], -1))
+            # The cap is exposed only where its endpoint segment is nearest.
+            # Each segment distance is 1-Lipschitz, so half their difference
+            # bounds distance to that region. Intersecting this bound with the
+            # finite face avoids inserting a zero sheet into an overlapping leg.
+            hidden = jnp.maximum((_length(perp[..., i, :]) - nearest) * 0.5, 0.0)
+            cap_distance = jnp.maximum(cap_distance, hidden)
+            d = jnp.maximum(d, -cap_distance)
+    return d
 
 
 def _sweep_joint(uv, over, flat):

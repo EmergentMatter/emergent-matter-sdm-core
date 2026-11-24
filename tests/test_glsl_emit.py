@@ -1755,7 +1755,7 @@ def test_a_sweep_bakes_its_frames_and_calls_the_child_in_the_section_plane():
     assert "for (int i = 0; i < 3; ++i) {" in src
     assert "vec2(dot(perp_star, NN[istar]), dot(perp_star, BB[istar])), over, end_cap);" in src
     assert re.search(r"float d2d = sdf_n\d+_d2\(uv\);", src)
-    assert "return sdm_sweep_finish(d2d, end_cap ? over : 0.0);" in src
+    assert "sdm_sweep_finish(d2d, cap);" in src
     assert "sdf_circle_2d(p, 0.4)" in src
     assert em.sweep_max_s == 3
     assert em.sweep_table == []
@@ -1882,8 +1882,8 @@ def test_a_large_sweep_moves_its_frames_into_the_table():
     em = _emit(_long_sweep(600), metadata=_sweep_bbox())
     assert len(em.sweep_table) == 4 * (1 + 4 * 599), "header plus four texels per segment"
     assert "vec3 A[" not in em.scene_source
-    assert "vec3 uvo = sdm_sweep_tab(p, 0);" in em.scene_source
-    assert "return sdm_sweep_finish(d2d, uvo.z);" in em.scene_source
+    assert "vec4 uvo = sdm_sweep_tab(p, 0);" in em.scene_source
+    assert "sdm_sweep_finish(d2d, uvo.z);" in em.scene_source
     assert em.sweep_tex_width == 1024
     assert em.sweep_max_s == 599
     for d in (

@@ -488,8 +488,7 @@ def test_the_transcribed_glsl_bodies_are_still_what_lib_glsl_says():
     assert "vec3(c * p.x - s * p.y, s * p.x + c * p.y, p.z)" in rotate_z
 
     finish = _glsl_body("sdm_sweep_finish")
-    assert "float d_ax = (over > 0.0) ? over : -1.0e9;" in finish
-    assert "vec2 w = vec2(d2d, d_ax);" in finish
+    assert "vec2 w = vec2(d2d, cap);" in finish
     assert "length(max(w, vec2(0.0))) + min(max(w.x, w.y), 0.0)" in finish
 
     tab = _glsl_body("sdm_sweep_tab")
@@ -508,7 +507,8 @@ def test_the_transcribed_glsl_bodies_are_still_what_lib_glsl_says():
         "vec2 uv = sdm_sweep_joint(vec2(dot(perp_star, nn), dot(perp_star, bb)), over, end_cap);"
         in tab
     )
-    assert "return vec3(uv, end_cap ? over : 0.0);" in tab
+    assert "float cap = end_cap ? over : -1.0e9;" in tab
+    assert "return vec4(uv, cap, sqrt(best));" in tab
 
     joint = _glsl_body("sdm_sweep_joint")
     assert "if (over <= 0.0 || end_cap) return uv;" in joint
@@ -680,10 +680,9 @@ def test_emitted_mirror_body_matches_the_compiled_mirror():
 _TIE_MARGIN = 1e-5
 
 
-def _glsl_sweep_finish(d2d, over):
+def _glsl_sweep_finish(d2d, cap):
     """Transcription of ``sdm_sweep_finish``."""
-    d_ax = np.where(over > 0.0, over, -1.0e9)
-    w = np.stack([d2d, d_ax], axis=-1)
+    w = np.stack([d2d, cap], axis=-1)
     return np.linalg.norm(np.maximum(w, 0.0), axis=-1) + np.minimum(
         np.maximum(w[..., 0], w[..., 1]), 0.0
     )
@@ -729,7 +728,20 @@ def _glsl_sweep_inline(p, frames, profile, closed):
     else:
         flat = ((istar == 0) & (over_lo > 0.0)) | ((istar == len(L) - 1) & (over_hi > 0.0))
     u, v = _glsl_sweep_joint(u, v, over, flat)
-    return _glsl_sweep_finish(profile(u, v), np.where(flat, over, 0.0))
+    cap = np.where(flat, over, -1.0e9)
+    d = _glsl_sweep_finish(profile(u, v), cap)
+    if not closed:
+        for i, origin in ((0, A[0]), (-1, A[-1] + L[-1] * T[-1])):
+            delta = p - origin
+            face = profile(np.sum(delta * N[i], axis=-1), np.sum(delta * B[i], axis=-1))
+            axial = np.sum(delta * T[i], axis=-1)
+            s = np.sum((p - A[i]) * T[i], axis=-1)
+            foot = A[i] + np.clip(s, 0.0, L[i])[:, None] * T[i]
+            hidden = np.maximum(
+                0.5 * (np.linalg.norm(p - foot, axis=-1) - np.linalg.norm(perp_star, axis=-1)), 0.0
+            )
+            d = np.maximum(d, -np.maximum(np.hypot(np.maximum(face, 0.0), axial), hidden))
+    return d
 
 
 def _glsl_sweep_tab(p, table, hdr, profile):
@@ -875,7 +887,7 @@ def test_the_transcribed_sweep_body_matches_the_compiled_sweep(tree, profile, lo
     assert "vec3 perp = p - (A[i] + clamp(s, 0.0, L[i]) * T[i]);" in src
     assert "if (d2 < best) { best = d2; istar = i; s_star = s; perp_star = perp; }" in src
     assert "vec2(dot(perp_star, NN[istar]), dot(perp_star, BB[istar])), over, end_cap);" in src
-    assert "return sdm_sweep_finish(d2d, end_cap ? over : 0.0);" in src
+    assert "sdm_sweep_finish(d2d, cap);" in src
 
     pts = _sweep_points(tree, lo_hi, probes)
     assert len(pts) >= 1000, "the tie filter must leave a cloud worth comparing"
@@ -951,14 +963,77 @@ def test_the_tabled_sweep_is_the_field_the_compiled_sweep_evaluates(shader_runti
     tree = sdf_sweep(sdf_primitive("box_2d", b=[0.3, 0.15]), ctrl, path_kind="bspline")
     emission = emit_glsl(_part(tree))
     assert emission.sweep_table, "the fixture must cross the table budget"
-    assert "vec3 uvo = sdm_sweep_tab(p, 0);" in emission.scene_source
-    assert "return sdm_sweep_finish(d2d, uvo.z);" in emission.scene_source
+    assert "vec4 uvo = sdm_sweep_tab(p, 0);" in emission.scene_source
+    assert "sdm_sweep_finish(d2d, uvo.z);" in emission.scene_source
 
     pts = _sweep_points(tree, (-4.0, 4.0), [])
     glsl = _glsl_sweep_tab(pts, emission.sweep_table, 0, _box(0.3, 0.15))
     np.testing.assert_allclose(glsl, _compiled(tree, pts), rtol=1e-5, atol=1e-5)
     executed = shader_runtime.evaluate(emission, pts.astype(np.float32))[:, 3]
     np.testing.assert_allclose(executed, _compiled(tree, pts), rtol=1e-5, atol=1e-5)
+
+
+@pytest.mark.parametrize("n_points", [4, 600], ids=["inline", "tabled"])
+def test_sweep_cap_depth_survives_segment_switches_in_glsl(shader_runtime, n_points):
+    from software_defined_matter.sdf.sdf_shapes import capped_cylinder
+
+    xs = [0.0, 0.2, 1.8, 2.0] if n_points == 4 else np.linspace(0.0, 2.0, n_points)
+    tree = sdf_sweep(
+        sdf_primitive("circle_2d", r=0.5),
+        [[float(x), 0.0, 0.0] for x in xs],
+        path_kind="polyline",
+        closed=False,
+    )
+    emission = emit_glsl(_part(tree))
+    assert bool(emission.sweep_table) == (n_points == 600)
+    pts = np.array(
+        [
+            [x, y, 0.0]
+            for x in (0.0, 0.19999, 0.20001, 1.79999, 1.80001, 2.0)
+            for y in (0.0, 0.3, 0.6)
+        ],
+        dtype=np.float32,
+    )
+    reference = capped_cylinder(
+        jnp.asarray(np.stack([pts[:, 1], pts[:, 2], pts[:, 0] - 1], -1)), 1.0, 0.5
+    )
+    glsl = shader_runtime.evaluate(emission, pts)[:, 3]
+    # Float32 endpoint frames and software GLSL round differently by a few ulps.
+    np.testing.assert_allclose(glsl, reference, atol=2e-6, rtol=0.0)
+    np.testing.assert_allclose(glsl, _compiled(tree, pts), atol=2e-6, rtol=0.0)
+
+
+@pytest.mark.parametrize("n_samples", [2, 201], ids=["inline", "tabled"])
+def test_bent_sweep_caps_do_not_add_hidden_faces_in_glsl(shader_runtime, n_samples):
+    corners = np.array([[0.0, 0.0, 0.0], [0.2, 0.0, 0.0], [0.2, 2.0, 0.0], [-1.0, 2.0, 0.0]])
+    path = np.concatenate(
+        [
+            np.linspace(a, b, n_samples, endpoint=False)
+            for a, b in zip(corners[:-1], corners[1:], strict=True)
+        ]
+        + [corners[-1:]]
+    )
+    tree = sdf_sweep(
+        sdf_primitive("circle_2d", r=0.5), path.tolist(), path_kind="polyline", closed=False
+    )
+    emission = emit_glsl(_part(tree))
+    assert bool(emission.sweep_table) == (n_samples == 201)
+    pts = np.array(
+        [
+            [0.1, 0.09999, 0.0],
+            [0.1, 0.10001, 0.0],
+            [0.0, 0.4, 0.0],
+            [0.0, 2.0, 0.0],
+            [0.0, -0.4, 0.0],
+        ],
+        dtype=np.float32,
+    )
+    values = shader_runtime.evaluate(emission, pts)[:, 3]
+    np.testing.assert_allclose(values, _compiled(tree, pts), atol=2e-6, rtol=0.0)
+    assert abs(values[1] - values[0]) <= 2e-5 + 2e-6
+    assert values[2] < 0.0
+    assert values[3] == pytest.approx(-0.5, abs=2e-6)
+    assert values[4] == pytest.approx(0.0, abs=2e-6)
 
 
 # ---------------------------------------------------------------------------
@@ -1076,6 +1151,10 @@ _REVALUED = {
     "screw_thread-shallow-coarse": (
         sdf_primitive("screw_thread", r_root=2.0, depth=0.1, pitch=12.0, width=1.0,
                       n_turns=2.0, phase=0.0, handedness=1.0, flank_deg=60.0), 4.5),
+    "sweep-open-ends-inside": (
+        sdf_sweep(sdf_primitive("circle_2d", r=0.5),
+                  [[-1.5, -1.0, 0.0], [1.0, -1.0, 0.0], [1.0, 1.5, 0.0]],
+                  path_kind="polyline"), 2.5),
 }
 # fmt: on
 

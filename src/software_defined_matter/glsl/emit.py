@@ -1212,7 +1212,8 @@ class _GLSLEmitter:
         find the single nearest segment by true 3-D distance, evaluate the
         child's 2-D function in that segment's cross-section plane (through
         ``sdm_sweep_joint``, which rounds an interior vertex), and cap a true
-        open end's axial overshoot with ``sdm_sweep_finish``.
+        open end's axial overshoot with ``sdm_sweep_finish``. Interior cap
+        distances use the endpoint frames independently of the segment pick.
 
         Path control points and ``normal0`` must be literal. Both are baked,
         and a ``$ref`` in either would freeze the geometry at its emit-time
@@ -1266,14 +1267,36 @@ class _GLSLEmitter:
         n_seg = int(A.shape[0])
         self.sweep_max_s = max(self.sweep_max_s, n_seg)
 
+        def finish(value: str, nearest: str) -> list[str]:
+            if closed:
+                return [f"return {value};"]
+            lines = [f"float d = {value};"]
+            # Endpoint frames are baked just like the path table. The profile
+            # remains a function call so live profile parameters affect caps.
+            for k, (i, origin) in enumerate(((0, A[0]), (-1, A[-1] + L[-1] * T[-1]))):
+                args = ", ".join(
+                    self._emit_value(v.tolist(), "vec3") for v in (origin, T[i], N[i], B[i])
+                )
+                length = _float_literal(float(L[i]))
+                over = (
+                    f"max(-cap{k}.z, cap{k}.z - {length})"
+                    if i == 0
+                    else f"max(-cap{k}.z - {length}, cap{k}.z)"
+                )
+                lines += [
+                    f"vec3 cap{k} = sdm_sweep_cap_query(p, {args});",
+                    f"d = max(d, -sdm_sweep_cap_distance({child_fn}(cap{k}.xy),"
+                    f" cap{k}, max({over}, 0.0), {nearest}));",
+                ]
+            return lines + ["return d;"]
+
         fn = self._fn_name(3)
         if self.sweep_table_on:
             hdr = self._table_sweep(A, T, L, N, B, closed)
             body = [
-                f"vec3 uvo = sdm_sweep_tab(p, {hdr});",
+                f"vec4 uvo = sdm_sweep_tab(p, {hdr});",
                 f"float d2d = {child_fn}(uvo.xy);",
-                "return sdm_sweep_finish(d2d, uvo.z);",
-            ]
+            ] + finish("sdm_sweep_finish(d2d, uvo.z)", "uvo.w")
             self._emit_function(f"float {fn}(vec3 p)", body)
             return fn
 
@@ -1318,11 +1341,11 @@ class _GLSLEmitter:
                 else "bool end_cap = (istar == 0 && over_lo > 0.0)"
                 f" || (istar == {n_seg - 1} && over_hi > 0.0);"
             ),
+            "float cap = end_cap ? over : -1.0e9;",
             "vec2 uv = sdm_sweep_joint(",
             "    vec2(dot(perp_star, NN[istar]), dot(perp_star, BB[istar])), over, end_cap);",
             f"float d2d = {child_fn}(uv);",
-            "return sdm_sweep_finish(d2d, end_cap ? over : 0.0);",
-        ]
+        ] + finish("sdm_sweep_finish(d2d, cap)", "sqrt(best)")
         self._emit_function(f"float {fn}(vec3 p)", body)
         return fn
 

@@ -1057,7 +1057,7 @@ _WARPS = ("twist", "bend", "twist_radial", "twist_linear")
 _SWEEPS = tuple(c for c in OP_CASES if c.startswith("sweep-"))
 _WARP_STRETCH = "rotation angle varies with position, so space stretches more the further out"
 _WARP_COMPRESS = "a varying rotation compresses space as well as stretching it"
-_SWEEP_NAN = "sqrt of max(d2d, 0)**2 + max(d_ax, 0)**2, which is 0 at every interior point (#36)"
+_BALL_JOINT = "ball joint stretches a non-circular profile (#42)"
 
 # fmt: off
 # Over 1 near the surface, but bounded by ``infer_sdf_max_rate`` over an
@@ -1069,8 +1069,6 @@ OP_RATE_BOUNDED_BY_DOMAIN: dict[str, str] = {
 }
 
 # Over 1 near the surface with no domain-dependent excuse.
-_BALL_JOINT = "ball joint stretches a non-circular profile (#42)"
-
 OP_KNOWN_OVER_REPORTING: dict[str, str] = {
     "loft-field-taper":    "nothing bounds how fast two arbitrary section fields differ; "
                            "interp='shape' is bounded",
@@ -1098,7 +1096,6 @@ OP_KNOWN_UNDER_REPORTING: dict[str, str] = {
 }
 
 # Not a distance on the named side(s): the projection misses.
-# Safe sweep gradients expose swallowed joint surfaces inside as well as cap errors outside.
 OP_KNOWN_NOT_DISTANCES: dict[str, tuple[frozenset[str], str]] = {
     "union-overlapping-spheres":       (_INSIDE, "min measures to swallowed surface (#39)"),
     "mirror-overlapping":              (_INSIDE, "union with its reflection (#39)"),
@@ -1120,18 +1117,17 @@ OP_KNOWN_NOT_DISTANCES: dict[str, tuple[frozenset[str], str]] = {
     "displace":                        (_BOTH, "displaced surface (#37)"),
     "loft-field-taper":                (_BOTH, "interpolated sections (#36, #37)"),
     "loft_shape-taper":                (_BOTH, "interpolated sections (#36, #37)"),
-    "sweep-circle-straight":           (_OUTSIDE, "inside the tube the value ignores the end "
-                                                  "caps, where outside projections land (#36)"),
-    "sweep-circle-corner-90":          (_BOTH, "inside the tube the value ignores the end "
-                                                  "caps, where outside projections land (#36)"),
-    "sweep-box-corner-90":             (_BOTH, "ball joint (#42), and the end caps (#36)"),
-    "sweep-box-corner-60":             (_BOTH, "ball joint (#42), and the end caps (#36)"),
+    "sweep-circle-corner-90":          (_INSIDE, "the nearest segment wins, so inside a "
+                                                 "joint it acts as a union (#37)"),
+    "sweep-box-corner-90":             (_BOTH, "ball joint (#42); inside, a union (#37)"),
+    "sweep-box-corner-60":             (_BOTH, "ball joint (#42); inside, a union (#37)"),
 }
 
 # Value jumps somewhere: the nearby-pair check (#32).
-_CAP_JUMP = "inside the tube the value ignores the end caps, so it jumps across each cap (#36)"
+_JOINT_JUMP = "the ball joint folds a non-circular profile differently on each side of " \
+    "the segment switch (#42)"
 OP_KNOWN_VALUE_JUMPS: dict[str, str] = dict.fromkeys(
-    (c for c in _SWEEPS if c != "sweep-circle-bspline-loop"), _CAP_JUMP
+    ("sweep-box-corner-90", "sweep-box-corner-60"), _JOINT_JUMP
 )
 
 # Non-finite value or gradient, on random samples or on the round-number grid.
