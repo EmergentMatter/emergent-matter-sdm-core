@@ -1,1 +1,0 @@
-Keep JAX gradients finite at zero-length norms, polygon and cone boundaries, coincident capsule and segment endpoints, sector folds, radial-twist axes, and zero-width smooth booleans. Preserve shader value parity for the corresponding branches.

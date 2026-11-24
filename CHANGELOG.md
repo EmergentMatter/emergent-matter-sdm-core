@@ -2,6 +2,25 @@
 
 <!-- towncrier release notes start -->
 
+## 1.4.0 (2026-11-24)
+
+### Minor
+
+- Change distance-field magnitudes for `shear_linear`, `taper_linear`, `displace`, shape-interpolated `loft`, and screw-thread flanks to limit over-reporting under their documented assumptions. Their own zero sets are preserved, but enclosing `round`, `onion`, and smooth booleans can change geometry; field-dependent metrics and optimization objectives can also change. Recheck dimensions in composed models. These fields remain approximate, so rounding distances, shell thicknesses, and blend radii are not certified physical lengths. Displacement consumer fingerprints have changed. See `docs/adr/0012-conservative-field-scaling.md` for the policy and limitations.
+- Normalize plane equations in JAX and GLSL, including tiny and large float32 normals, while preserving their zero sets. Correct pyramid interior distances near the base and elongation's interior core term. These value corrections can change geometry when composed with rounding, shells, or smooth booleans. Degenerate zero plane normals do not define a plane.
+- Schema validation runs on jsonschema-rs (draft 2020-12, compiled), about a thousand times faster on large documents; jsonschema still writes the error message for a rejected document and decides alone for documents holding numpy values, NaN or infinity, or when jsonschema-rs is not installed.
+
+### Patch
+
+- A negated negative number (for example a rotation by minus a negative angle) now emits valid GLSL instead of a `--` decrement that failed to compile.
+- Bound screw-thread flank distances throughout the bore, including shallow coarse-pitch teeth, with matching JAX and GLSL evaluation.
+- Keep JAX gradients finite at zero-length norms, polygon and cone boundaries, coincident capsule and segment endpoints, sector folds, radial-twist axes, and zero-width smooth booleans. Preserve shader value parity for the corresponding branches.
+- Keep capsule and segment_2d endpoint gradients finite at coincident endpoints under float32 JAX JIT, with matching GLSL point-distance evaluation.
+- Keep open sweep cap depths continuous across segment switches in JAX and GLSL, including subdivided straight paths and cap faces partly covered by another leg.
+
+  Open sweeps now evaluate the profile at both endpoint caps in addition to the selected segment, in JAX and emitted GLSL. Shader consumers such as sdm-view should account for these additional profile evaluations, particularly with complex profiles. This is not a measured whole-sweep slowdown. Cap correction does not make general sweeps exact distance fields.
+- consolidate and expand tests for eikonal property (distance=1 or move of 1)
+
 ## 1.3.0 (2026-11-21)
 
 ### Minor
