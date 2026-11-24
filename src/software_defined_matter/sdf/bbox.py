@@ -11,8 +11,10 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Literal, get_args
+
+from software_defined_matter.sdf._tree import iter_postorder
 
 if TYPE_CHECKING:
     from software_defined_matter.model import MaterialRegion, Part, SDFTree
@@ -276,7 +278,43 @@ def _current_values(part: Part) -> dict[str, float]:
     return values
 
 
+def _bbox_children(node: Any) -> list[Any]:
+    if not isinstance(node, dict):
+        return []
+    if node.get("type") == "op":
+        children = node.get("children") or []
+        if node.get("op") in ("subtract", "smooth_subtract"):
+            return children[:1]
+        return list(children)
+    if node.get("type") in ("transform", "modifier", "deform"):
+        return [node["child"]]
+    return []
+
+
 def _infer_node_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox:
+    boxes: dict[int, BBox | BBoxInferenceError] = {}
+
+    def child_box(child: dict[str, Any]) -> BBox:
+        result = boxes[id(child)]
+        if isinstance(result, BBoxInferenceError):
+            raise result
+        return result
+
+    for current in iter_postorder(node, _bbox_children):
+        try:
+            boxes[id(current)] = _infer_bbox_shallow(current, intervals, child_box)
+        except BBoxInferenceError as exc:
+            # Intersection can be bounded by another child when this one is
+            # unbounded; preserve that decision for the parent operation.
+            boxes[id(current)] = exc
+    return child_box(node)
+
+
+def _infer_bbox_shallow(
+    node: dict[str, Any],
+    intervals: dict[str, Interval],
+    child_box: Callable[[dict[str, Any]], BBox],
+) -> BBox:
     if not isinstance(node, dict) or "type" not in node:
         raise UnsupportedSDFNodeError(f"Not an SDF node: {node!r}")
 
@@ -284,17 +322,17 @@ def _infer_node_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BB
     if node_type == "primitive":
         return _infer_primitive_bbox(node, intervals)
     if node_type == "op":
-        return _infer_op_bbox(node, intervals)
+        return _infer_op_bbox(node, intervals, child_box)
     if node_type == "transform":
-        return _infer_transform_bbox(node, intervals)
+        return _infer_transform_bbox(node, intervals, child_box)
     if node_type == "modifier":
-        return _infer_modifier_bbox(node, intervals)
+        return _infer_modifier_bbox(node, intervals, child_box)
     if node_type == "2d_to_3d":
         return _infer_2d_to_3d_bbox(node, intervals)
     if node_type == "loft":
         return _infer_loft_bbox(node, intervals)
     if node_type == "deform":
-        return _infer_deform_bbox(node, intervals)
+        return _infer_deform_bbox(node, intervals, child_box)
     if node_type == "sweep":
         return _infer_sweep_bbox(node, intervals)
     if node_type == "extension":
@@ -520,7 +558,11 @@ def _infer_primitive_bbox(node: dict[str, Any], intervals: dict[str, Interval]) 
     raise UnsupportedSDFNodeError(f"Unknown primitive {kind!r}")
 
 
-def _infer_op_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox:
+def _infer_op_bbox(
+    node: dict[str, Any],
+    intervals: dict[str, Interval],
+    child_box: Callable[[dict[str, Any]], BBox],
+) -> BBox:
     op = node["op"]
     children = node["children"]
     if not children:
@@ -530,10 +572,10 @@ def _infer_op_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox
         # Subtract is bounded by the minuend; the subtrahend may be
         # unbounded (e.g. a half-space `plane` used as a cutting tool), so
         # only the first child is inferred.
-        return _infer_node_bbox(children[0], intervals)
+        return child_box(children[0])
 
     if op in ("union", "smooth_union"):
-        return _bbox_enclose(_infer_node_bbox(c, intervals) for c in children)
+        return _bbox_enclose(child_box(c) for c in children)
 
     if op in ("intersect", "smooth_intersect"):
         # Intersect is bounded iff at least one child is bounded: that
@@ -543,7 +585,7 @@ def _infer_op_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox
         last_err: BBoxInferenceError | None = None
         for c in children:
             try:
-                bounded.append(_infer_node_bbox(c, intervals))
+                bounded.append(child_box(c))
             except BBoxInferenceError as exc:
                 last_err = exc
         if not bounded:
@@ -555,9 +597,13 @@ def _infer_op_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox
     raise UnsupportedSDFNodeError(f"Unsupported op {op!r} for bbox inference")
 
 
-def _infer_transform_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox:
+def _infer_transform_bbox(
+    node: dict[str, Any],
+    intervals: dict[str, Interval],
+    child_box: Callable[[dict[str, Any]], BBox],
+) -> BBox:
     tf = node["transform"]
-    child_bbox = _infer_node_bbox(node["child"], intervals)
+    child_bbox = child_box(node["child"])
     params = node.get("params", {}) or {}
 
     if tf == "translate":
@@ -639,9 +685,13 @@ def _infer_transform_bbox(node: dict[str, Any], intervals: dict[str, Interval]) 
     raise UnsupportedSDFNodeError(f"Unknown transform {tf!r}")
 
 
-def _infer_modifier_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox:
+def _infer_modifier_bbox(
+    node: dict[str, Any],
+    intervals: dict[str, Interval],
+    child_box: Callable[[dict[str, Any]], BBox],
+) -> BBox:
     mod = node["modifier"]
-    child_bbox = _infer_node_bbox(node["child"], intervals)
+    child_bbox = child_box(node["child"])
     params = node.get("params", {}) or {}
     if mod == "round":
         r = _scalar_abs_max(params["r"], intervals)
@@ -789,7 +839,11 @@ def _infer_sweep_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> B
     return (_vec3(lo[a] - rad for a in range(3)), _vec3(hi[a] + rad for a in range(3)))
 
 
-def _infer_deform_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> BBox:
+def _infer_deform_bbox(
+    node: dict[str, Any],
+    intervals: dict[str, Interval],
+    child_box: Callable[[dict[str, Any]], BBox],
+) -> BBox:
     """Conservative bbox for ``twist`` / ``bend`` / ``displace`` deforms.
 
     - ``twist`` rotates the xz plane around the Y axis; rotation preserves
@@ -813,7 +867,7 @@ def _infer_deform_bbox(node: dict[str, Any], intervals: dict[str, Interval]) -> 
     box when ``k`` is small.
     """
     deform = node["deform"]
-    child_bbox = _infer_node_bbox(node["child"], intervals)
+    child_bbox = child_box(node["child"])
     (xlo, ylo, zlo), (xhi, yhi, zhi) = child_bbox
 
     if deform == "twist":

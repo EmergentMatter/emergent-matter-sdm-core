@@ -22,7 +22,6 @@ functions in :mod:`software_defined_matter.sdf.sdf_shapes`,
 from __future__ import annotations
 
 from collections.abc import Callable
-from copy import deepcopy
 from typing import TYPE_CHECKING, Any, Protocol
 
 import jax.numpy as jnp
@@ -38,6 +37,7 @@ from software_defined_matter.sdf import sdf_ops as ops
 from software_defined_matter.sdf import sdf_shapes as shapes
 from software_defined_matter.sdf import transforms
 from software_defined_matter.sdf._helpers import _length
+from software_defined_matter.sdf._tree import iter_postorder, snapshot_tree
 
 if TYPE_CHECKING:
     from software_defined_matter.model import Part, SDFTree
@@ -153,7 +153,7 @@ def make_sdf_closure(
             ``part.metadata.get("smooth_csg", False)``. Pass ``True`` or
             ``False`` to override the metadata value.
     """
-    tree = deepcopy(tree)
+    tree = snapshot_tree(tree)
     if b_smooth_csg is None:
         b_smooth_csg = bool(part.metadata.get("smooth_csg", False))
     binding = make_binding(part)
@@ -207,7 +207,7 @@ def make_sdf_closure_with_binding(
     :func:`make_sdf_closure` (which reads ``part.metadata["smooth_csg"]``)
     when metadata-driven behaviour is desired.
     """
-    tree = deepcopy(tree)
+    tree = snapshot_tree(tree)
     if b_smooth_csg is None:
         b_smooth_csg = False
     node_fn = _compile_node(
@@ -240,7 +240,7 @@ def make_sdf_closure_with_binding(
 
 
 # ---------------------------------------------------------------------------
-# Internal: recursive tree walk
+# Internal: child-first compilation
 # ---------------------------------------------------------------------------
 
 
@@ -248,6 +248,26 @@ def _compile_node(
     node: SDFTree,
     binding: ParamBinding,
     *,
+    b_smooth_csg: bool,
+    d_smooth_k: float,
+) -> SDFClosure:
+    compiled: dict[int, SDFClosure] = {}
+    for current in iter_postorder(node):
+        compiled[id(current)] = _compile_shallow(
+            current,
+            binding,
+            compiled=compiled,
+            b_smooth_csg=b_smooth_csg,
+            d_smooth_k=d_smooth_k,
+        )
+    return compiled[id(node)]
+
+
+def _compile_shallow(
+    node: SDFTree,
+    binding: ParamBinding,
+    *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
@@ -261,6 +281,7 @@ def _compile_node(
         return _compile_op(
             node,
             binding,
+            compiled=compiled,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
@@ -268,6 +289,7 @@ def _compile_node(
         return _compile_transform(
             node,
             binding,
+            compiled=compiled,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
@@ -275,6 +297,7 @@ def _compile_node(
         return _compile_modifier(
             node,
             binding,
+            compiled=compiled,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
@@ -282,6 +305,7 @@ def _compile_node(
         return _compile_deform(
             node,
             binding,
+            compiled=compiled,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
@@ -289,6 +313,7 @@ def _compile_node(
         return _compile_2d_to_3d(
             node,
             binding,
+            compiled=compiled,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
@@ -296,6 +321,7 @@ def _compile_node(
         return _compile_loft(
             node,
             binding,
+            compiled=compiled,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
@@ -303,6 +329,7 @@ def _compile_node(
         return _compile_sweep(
             node,
             binding,
+            compiled=compiled,
             b_smooth_csg=b_smooth_csg,
             d_smooth_k=d_smooth_k,
         )
@@ -447,14 +474,12 @@ def _compile_op(
     node: dict[str, Any],
     binding: ParamBinding,
     *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
     op_name = node["op"]
-    children: list[SDFClosure] = [
-        _compile_node(c, binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
-        for c in node["children"]
-    ]
+    children: list[SDFClosure] = [compiled[id(c)] for c in node["children"]]
     if not children:
         raise ValueError("CSG op has no children")
 
@@ -537,11 +562,12 @@ def _compile_transform(
     node: dict[str, Any],
     binding: ParamBinding,
     *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
     tf_name = node["transform"]
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = compiled[id(node["child"])]
     raw_kwargs = _op_kwargs(node)
 
     if tf_name == "translate":
@@ -693,11 +719,12 @@ def _compile_modifier(
     node: dict[str, Any],
     binding: ParamBinding,
     *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
     name = node["modifier"]
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = compiled[id(node["child"])]
     raw_kwargs = _op_kwargs(node)
 
     if name == "round":
@@ -731,11 +758,12 @@ def _compile_deform(
     node: dict[str, Any],
     binding: ParamBinding,
     *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
     name = node["deform"]
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = compiled[id(node["child"])]
     raw_kwargs = _op_kwargs(node)
 
     if name == "twist":
@@ -834,11 +862,12 @@ def _compile_2d_to_3d(
     node: dict[str, Any],
     binding: ParamBinding,
     *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
     method = node["method"]
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = compiled[id(node["child"])]
     raw_kwargs = _op_kwargs(node)
 
     if method == "revolution":
@@ -889,15 +918,13 @@ def _compile_loft(
     node: dict[str, Any],
     binding: ParamBinding,
     *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
     """Loft N 2D cross-section children along Z at the stations in ``params['z']``
     (see :func:`software_defined_matter.sdf.sdf_ops.loft`)."""
-    children = [
-        _compile_node(c, binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
-        for c in node["children"]
-    ]
+    children = [compiled[id(c)] for c in node["children"]]
     if len(children) < 2:
         raise ValueError("loft needs at least 2 cross-section children")
     raw_kwargs = _op_kwargs(node)
@@ -976,10 +1003,11 @@ def _compile_sweep(
     node: dict[str, Any],
     binding: ParamBinding,
     *,
+    compiled: dict[int, SDFClosure],
     b_smooth_csg: bool,
     d_smooth_k: float,
 ) -> SDFClosure:
-    child = _compile_node(node["child"], binding, b_smooth_csg=b_smooth_csg, d_smooth_k=d_smooth_k)
+    child = compiled[id(node["child"])]
     raw_kwargs = _op_kwargs(node)
     if "path" not in raw_kwargs:
         raise ValueError("sweep requires a 'path' param: a list of [x, y, z] control points")

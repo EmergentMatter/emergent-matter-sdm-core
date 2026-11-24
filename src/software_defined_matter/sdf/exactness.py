@@ -16,6 +16,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from software_defined_matter.sdf._primitive_domains import primitive_domain_proven
+from software_defined_matter.sdf._tree import iter_postorder
 from software_defined_matter.sdf.bbox import (
     BBoxInferenceError,
     Interval,
@@ -272,6 +273,32 @@ def _finite_rigid_parameter(value: Any, intervals: dict[str, Interval]) -> bool:
 
 
 def _infer(node: Any, intervals: dict[str, Interval], smooth: bool) -> DistanceExactness:
+    def dependencies(current: Any) -> list[Any]:
+        if not isinstance(current, dict) or current.get("type") == "primitive":
+            return []
+        if current.get("type") == "op":
+            if smooth or current.get("op") not in ("union", "intersect", "subtract"):
+                return []
+            return list(current.get("children") or [])
+        # Loft sections and other unanalysed multi-child nodes do not contribute
+        # to a proof. Visiting their polygons can dominate the cost of inference.
+        return [current["child"]] if "child" in current else []
+
+    contracts: dict[int, DistanceExactness] = {}
+    try:
+        for current in iter_postorder(node, dependencies):
+            contracts[id(current)] = _infer_shallow(current, intervals, smooth, contracts)
+    except (KeyError, TypeError, ValueError):
+        return _unknown("malformed or cyclic SDF tree")
+    return contracts[id(node)]
+
+
+def _infer_shallow(
+    node: Any,
+    intervals: dict[str, Interval],
+    smooth: bool,
+    contracts: dict[int, DistanceExactness],
+) -> DistanceExactness:
     if not isinstance(node, dict):
         return _unknown("not an SDF node")
     kind = node.get("type")
@@ -320,7 +347,7 @@ def _infer(node: Any, intervals: dict[str, Interval], smooth: bool) -> DistanceE
             op = node.get("op")
             if op not in ("union", "intersect", "subtract") or smooth:
                 return _unknown("smooth or unanalysed operation")
-            cs = [_infer(c, intervals, smooth) for c in children]
+            cs = [contracts[id(c)] for c in children]
             if len(cs) == 1:
                 return cs[0]
             if op == "union":
@@ -344,7 +371,7 @@ def _infer(node: Any, intervals: dict[str, Interval], smooth: bool) -> DistanceE
                 _common([c.inside for c in cs]),
                 "intersection; subtraction swaps cutter sides",
             )
-        child = _infer(node.get("child"), intervals, smooth)
+        child = contracts.get(id(node.get("child")), _unknown("not an SDF node"))
         if kind == "transform":
             tf = node.get("transform")
             if tf in ("translate", "rotate_x", "rotate_y", "rotate_z"):

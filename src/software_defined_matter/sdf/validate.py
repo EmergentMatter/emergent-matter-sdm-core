@@ -834,9 +834,12 @@ def warn_distance_consumers(
                 DistanceAccuracyWarning,
                 stacklevel=3,
             )
+        for i in reversed(range(len(children))):
+            pending.append((children[i], f"{path}.children[{i}]"))
         if "child" in node:
-            walk(node["child"], f"{path}.child")
-        for i, child in enumerate(children):
-            walk(child, f"{path}.children[{i}]")
+            pending.append((node["child"], f"{path}.child"))
 
-    walk(tree, path)
+    pending = [(tree, path)]
+    while pending:
+        current, current_path = pending.pop()
+        walk(current, current_path)
