@@ -19,6 +19,7 @@ from software_defined_matter import (
     sdf_transform,
     wire,
 )
+from software_defined_matter.audit import gap_audit
 from software_defined_matter.dsl.expr import compile_expr
 from software_defined_matter.sdf.bake import bake_raster_field
 from software_defined_matter.sdf.compile import make_sdf_closure
@@ -197,6 +198,20 @@ def test_length_metrics_warn_at_compilation_for_nonexact_fields(name):
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         compile_expr({"type": "metric", "name": name}, _part())
+
+
+def test_gap_audit_rejects_an_unbounded_rate_before_sampling():
+    tree = sdf_primitive("helix", major_r=3, pitch=1, r=0.1, n_turns=2)
+    part = _part(tree)
+    with pytest.raises(ValueError, match="global rate <= 1"):
+        gap_audit(part, {("body", "body"): 0})
+
+
+def test_gap_audit_warns_without_claiming_a_sampled_lower_bound():
+    tree = sdf_primitive("ellipsoid", r=[1, 2, 3])
+    part = _part(tree)
+    with pytest.warns(DistanceAccuracyWarning, match="not a certified length or lower bound"):
+        gap_audit(part, {("body", "body"): 0}, d_voxel=2)
 
 
 def test_a_cutter_proven_inside_a_solid_preserves_both_sides():

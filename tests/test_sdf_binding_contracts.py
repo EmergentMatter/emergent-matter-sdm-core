@@ -7,18 +7,21 @@ import jax.numpy as jnp
 import pytest
 
 from software_defined_matter import (
+    MaterialRegion,
     Param,
     Part,
     sdf_op,
     sdf_primitive,
     sdf_transform,
 )
+from software_defined_matter.audit import GapAuditError, assert_gaps
 from software_defined_matter.sdf.bake import bake_raster_field
 from software_defined_matter.sdf.compile import make_sdf_closure
 from software_defined_matter.sdf.exactness import (
     EXACT,
     LOWER_BOUND,
     UNKNOWN,
+    DistanceAccuracyWarning,
     infer_sdf_exactness,
 )
 
@@ -85,6 +88,50 @@ def test_contract_and_evaluation_keep_the_same_captured_fixed_value_after_part_m
     assert fn.distance_exactness.is_exact
     assert float(fn(point)) == pytest.approx(before, abs=1e-6)
     assert make_sdf_closure(tree, part).distance_exactness.outside == UNKNOWN
+
+
+@pytest.mark.parametrize("free", [False, True], ids=["fixed", "free-default"])
+def test_gap_assertions_check_actual_values_instead_of_declared_bounds(free):
+    part = Part(
+        name="gap-domain",
+        params={"r": Param("r", 2, free=free, bounds=(0, 1))},
+        materials=[
+            MaterialRegion(material_id=1, name="a", sdf_tree=_rounded_box()),
+            MaterialRegion(
+                material_id=2,
+                name="b",
+                sdf_tree=sdf_transform("translate", sdf_primitive("sphere", r=1), t=[5, 0, 0]),
+            ),
+        ],
+    )
+    with (
+        pytest.warns(DistanceAccuracyWarning, match="unknown outside distance"),
+        pytest.raises(GapAuditError, match="UNVERIFIED"),
+    ):
+        assert_gaps(part, {("a", "b"): 3}, d_voxel=1, d_tol=100)
+
+
+@pytest.mark.parametrize("free", [False, True], ids=["fixed", "free-default"])
+def test_gap_sampling_domain_tracks_actual_values_outside_the_declared_envelope(free):
+    part = Part(
+        name="translated-gap",
+        params={"y": Param("y", 100, free=free, bounds=(0, 1))},
+        materials=[
+            MaterialRegion(
+                material_id=i + 1,
+                name=name,
+                sdf_tree=sdf_transform(
+                    "translate",
+                    sdf_primitive("sphere", r=1),
+                    t=[i * 2.2, {"$ref": "y"}, 0],
+                ),
+            )
+            for i, name in enumerate(("a", "b"))
+        ],
+    )
+    (check,) = assert_gaps(part, {("a", "b"): 0.2}, d_voxel=0.5, d_tol=0.02)
+    assert check.b_ok
+    assert check.d_measured == pytest.approx(0.2, abs=0.02)
 
 
 @pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])

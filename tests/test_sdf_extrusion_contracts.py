@@ -19,6 +19,7 @@ from software_defined_matter import (
     sdf_primitive,
     sdf_transform,
 )
+from software_defined_matter.audit import GapAuditError, assert_gaps
 from software_defined_matter.dsl.expr import compile_expr
 from software_defined_matter.sdf.compile import make_sdf_closure
 from software_defined_matter.sdf.exactness import (
@@ -116,6 +117,48 @@ def test_exact_extrusion_matches_cylinder_distances_at_height_endpoints_under_ji
         assert fn(points, jnp.array([d_h], dtype=jnp.float32)).tolist() == pytest.approx(
             [-0.5, 0.5, 0.5], abs=1e-6
         )
+
+
+@pytest.mark.parametrize(
+    "bounds", [(1, 3), (-1, 3)], ids=["positive-range", "positive-current-only"]
+)
+def test_gap_assertions_accept_extrusions_with_exact_current_geometry(bounds):
+    tree, source = _extrusion(bounds=bounds)
+    part = Part(
+        name="extruded-gap",
+        params=source.params,
+        materials=[
+            MaterialRegion(1, "a", tree),
+            MaterialRegion(2, "b", sdf_transform("translate", tree, t=[3, 0, 0])),
+        ],
+    )
+    # Gap audits freeze current values, even if the optimization range
+    # includes heights that would not justify a distance contract.
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DistanceAccuracyWarning)
+        (check,) = assert_gaps(part, {("a", "b"): 1}, d_voxel=0.5, d_tol=0.02)
+    assert check.b_exact_outside and check.b_ok
+
+
+@pytest.mark.parametrize("cause", ["unknown-profile", "zero-height"])
+def test_gap_assertions_refuse_uncertified_extrusions(cause):
+    tree = sdf_2d_to_3d(
+        "extrusion",
+        _profile("unknown" if cause == "unknown-profile" else "circle"),
+        h=2 if cause == "unknown-profile" else 0,
+    )
+    part = Part(
+        name="unverified-gap",
+        materials=[
+            MaterialRegion(1, "a", tree),
+            MaterialRegion(2, "b", sdf_transform("translate", tree, t=[5, 0, 0])),
+        ],
+    )
+    with (
+        pytest.warns(DistanceAccuracyWarning, match="field-value estimate"),
+        pytest.raises(GapAuditError, match="UNVERIFIED.*exact exterior distances required"),
+    ):
+        assert_gaps(part, {("a", "b"): 3}, d_voxel=0.5, d_tol=0.02)
 
 
 def test_exact_extrusions_do_not_trigger_modifier_or_length_metric_warnings():

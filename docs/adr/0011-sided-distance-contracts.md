@@ -89,10 +89,12 @@ contract. Gap audits resolve current values through the SDF parameter binding,
 including derived relations whose caches may be stale or absent. Distance,
 rate, sampling-domain checks and field evaluation all use that private fixed
 snapshot. Auditing does not refresh the caller's parameter caches.
-Gap results retain both exterior classifications. Non-exact results
-are unverified and cannot pass a gap assertion even when their numbers match
-the declaration or warnings are ignored. Exact exterior fields permit sampled
-agreement checks, not certification of a minimum physical clearance.
+Gap results retain interior and exterior classifications for both regions.
+Exterior distances must be exact for a comparison to pass. If either the
+declared or measured gap is negative, both interior distances must also be
+exact. Missing required contracts make the result unverified even when the
+numbers match within tolerance or warnings are ignored. Passing means sampled
+agreement, not certification of a minimum physical clearance.
 
 ## Consequences
 
