@@ -1047,6 +1047,9 @@ class _GLSLEmitter:
             body = self._loft_field_body(children, span, smooth, n_sec)
         else:
             body = self._loft_shape_body(children, span, smooth, n_sec)
+            # Mirrors ops.loft_shape: the profile's gradient leans by S / H, so
+            # the corner combine with the cap is divided by sqrt(1 + S / H).
+            cap[-1] = "return sdm_loft_cap(d2d, p.z, zc, hh) / sqrt(1.0 + S / H);"
         fn = self._fn_name(3)
         self._emit_function(f"float {fn}(vec3 p)", body + cap)
         return fn
@@ -1111,6 +1114,7 @@ class _GLSLEmitter:
             if not isinstance(verts, (list, tuple)) or len(verts) < 3:
                 raise ValueError("loft interp='shape' section needs >= 3 outline vertices")
             outlines.append(list(verts))
+        authored = outlines
         outlines = self._resample_sections(outlines)
         counts = {len(o) for o in outlines}
         if len(counts) != 1:
@@ -1119,6 +1123,10 @@ class _GLSLEmitter:
                 f"(vertex correspondence); got {sorted(counts)}"
             )
         n_vert = counts.pop()
+        # The outline's speed along Z is taken from the authored sections, not
+        # the level-of-detail resample, so the shader divides by the same
+        # constant as ops.loft_shape_speed, which sees every vertex.
+        speed = self._loft_speed_lines(authored, n_sec)
         if n_vert > self.poly_max_n:  # pragma: no cover - pre-scan covers lofts
             raise AssertionError("poly_max_n underestimated a loft section outline")
 
@@ -1137,6 +1145,10 @@ class _GLSLEmitter:
             flat = ", ".join(self._emit_value(list(v), "vec2") for o in outlines for v in o)
             body = [f"vec2 SEC[{n_sec * n_vert}] = vec2[{n_sec * n_vert}]({flat});"]
         body += span
+        body += speed
+        if smooth:
+            body.append("S *= 3.0;")  # monotone PCHIP: at most three secants
+        body.append("float H = sqrt(1.0 + S * S);")
         fetch = (lambda k: f"sdm_poly_fetch({base} + {k})") if tabled else (lambda k: f"SEC[{k}]")
         body += [
             "vec2 V[SDM_POLY_MAX_N];",
@@ -1159,7 +1171,33 @@ class _GLSLEmitter:
                 "         + (-2.0 * t3 + 3.0 * t2) * b",
                 "         + (t3 - t2) * hseg * m1;",
             ]
-        return body + ["}", f"float d2d = sdf_polygon_2d(p.xy, V, {n_vert});"]
+        return body + ["}", f"float d2d = sdf_polygon_2d(p.xy, V, {n_vert}) / H;"]
+
+    def _loft_speed_lines(self, outlines: list[list[Any]], n_sec: int) -> list[str]:
+        """Lines setting ``float S``: the fastest a vertex moves per unit of Z.
+
+        Mirrors ``ops.loft_shape_speed`` before its PCHIP factor. Literal
+        outlines fold each span's largest vertex step into a constant; others
+        compute it per fragment from the emitted section values.
+        """
+        lines = ["float S = 0.0;"]
+        if all(_is_literal_vertex(v) for o in outlines for v in o):
+            for i in range(n_sec - 1):
+                step = max(
+                    math.hypot(float(b[0]) - float(a[0]), float(b[1]) - float(a[1]))
+                    for a, b in zip(outlines[i], outlines[i + 1], strict=True)
+                )
+                lines.append(
+                    f"S = max(S, {_float_literal(step)} / max(abs(ZS[{i + 1}] - ZS[{i}]), 1e-12));"
+                )
+            return lines
+        for i in range(n_sec - 1):
+            for a, b in zip(outlines[i], outlines[i + 1], strict=True):
+                va, vb = self._emit_value(list(a), "vec2"), self._emit_value(list(b), "vec2")
+                lines.append(
+                    f"S = max(S, length({vb} - {va}) / max(abs(ZS[{i + 1}] - ZS[{i}]), 1e-12));"
+                )
+        return lines
 
     # -- Sweep ------------------------------------------------------------
 
@@ -1574,13 +1612,15 @@ class _GLSLEmitter:
         if name in _POINT_WARP_DEFORMS:
             body = [
                 f"vec3 q = {self._warp_call(node, 'p')};",
-                f"return {child_fn}(q);",
+                f"return {child_fn}(q){self._warp_scale(node)};",
             ]
         elif name == "displace":
             if "field" not in node:
                 raise ValueError("deform 'displace' requires a 'field' subtree")
             field_fn = self._emit_field_node(node["field"])
-            body = [f"return {child_fn}(p) + {field_fn}(p);"]
+            rate = self._field_rate_expr(node["field"])
+            total = f"{child_fn}(p) + {field_fn}(p)"
+            body = [f"return {total};" if rate is None else f"return ({total}) / (1.0 + {rate});"]
         else:
             raise ValueError(f"Unknown / unsupported deform {name!r}")
 
@@ -1615,6 +1655,49 @@ class _GLSLEmitter:
         return fn
 
     # -- Field tree (displacement) --------------------------------------
+
+    def _warp_scale(self, node: dict[str, Any]) -> str:
+        """The factor a point-warp deform multiplies its child's value by.
+
+        ``taper_linear`` and ``shear_linear`` rescale so they never over-report
+        (``sdf_ops.taper_linear_scale`` / ``shear_linear_scale``); the twists
+        and ``bend`` do not. Returned as a ``" * f(...)"`` suffix, or ``""``.
+        Not applied by :meth:`emit_rest_fn`, which maps points, not values.
+        """
+        name = node["deform"]
+        kwargs = node.get("params") or {}
+        if name == "taper_linear":
+            s0 = self._emit_value(kwargs["s_0"], "float")
+            s1 = self._emit_value(kwargs["s_1"], "float")
+            return f" * op_taper_linear_scale({s0}, {s1})"
+        if name == "shear_linear":
+            args = ", ".join(
+                self._emit_value(kwargs[k], "float") for k in ("u0", "u1", "dz_0", "dz_1")
+            )
+            return f" * op_shear_linear_scale({args})"
+        return ""
+
+    def _field_rate_expr(self, node: Any) -> str | None:
+        """GLSL for the slope bound ``displace`` divides by, or ``None``.
+
+        Mirrors ``compile._compile_field_rate``: ``sin_xyz`` and ``radial`` have
+        one, ``angular`` does not, and a sum has one when all its terms do.
+        """
+        if node.get("type") == "field_op" and node.get("op") == "add":
+            terms = [self._field_rate_expr(c) for c in node.get("children", [])]
+            if not terms or any(t is None for t in terms):
+                return None
+            return "(" + " + ".join(t for t in terms if t is not None) + ")"
+        if node.get("type") != "field" or node.get("kind") not in ("sin_xyz", "radial"):
+            return None
+        kind = node["kind"]
+        kwargs = node.get("params") or {}
+        amplitude = self._emit_value(kwargs.get("amplitude", 1.0), "float")
+        if kind == "sin_xyz":
+            norm = f"length({self._emit_value(kwargs['freq'], 'vec3')})"
+        else:
+            norm = f"abs({self._emit_value(kwargs['freq'], 'float')})"
+        return f"(abs({amplitude}) * 6.283185307179586 * {norm})"
 
     def _emit_field_node(self, node: Any) -> str:
         if not isinstance(node, dict) or "type" not in node:

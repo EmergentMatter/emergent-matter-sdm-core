@@ -1072,20 +1072,22 @@ OP_RATE_BOUNDED_BY_DOMAIN: dict[str, str] = {
 _BALL_JOINT = "ball joint stretches a non-circular profile (#42)"
 
 OP_KNOWN_OVER_REPORTING: dict[str, str] = {
-    "shear_linear":          "not divided by the shear's largest singular value (#36)",
-    "taper_linear-constant": "child(p / s) with no rescale: over by 1/s (#36)",
-    "taper_linear-ramp":     "child(p / s) with no rescale: over by 1/s (#36)",
-    "displace":              "not divided by 1 + the field's rate (#36)",
-    "loft-field-taper":      "radial offset across a tilted wall (#36)",
-    "loft_shape-taper":      "radial offset across a tilted wall (#36)",
-    "sweep-box-corner-90":   "ball joint stretches a non-circular profile (#42)",
-    "sweep-box-corner-60":   "ball joint stretches a non-circular profile (#42)",
+    "loft-field-taper":    "nothing bounds how fast two arbitrary section fields differ; "
+                           "interp='shape' is bounded",
+    "sweep-box-corner-90": _BALL_JOINT,
+    "sweep-box-corner-60": _BALL_JOINT,
 }
 
 # Under 1 near the surface.
 OP_KNOWN_UNDER_REPORTING: dict[str, str] = {
     **dict.fromkeys(("twist", "bend", "twist_radial"), _WARP_COMPRESS),
-    "displace":              "an added field slows the value as well as speeding it",
+    "displace":              "divided by 1 + the field's steepest slope, so slow where it is "
+                             "flatter",
+    "shear_linear":          "divided by the ramp's stretch everywhere, so slow outside it",
+    "taper_linear-constant": "a per-axis scale: unit rate in XY, slow along Z",
+    "taper_linear-ramp":     "multiplied by min(s0, s1, 1), the worst case over the ramp",
+    "loft_shape-taper":      "divided by the outline's fastest speed, so slow where it moves "
+                             "less",
     "scale_axis":            "min(s) * child(p / s) is slow along the stretched axes",
     "onion-ellipsoid":       "inherits the ellipsoid's scaled field (#40)",
     "smooth_union":          "the blend region is not a distance by design (#37)",

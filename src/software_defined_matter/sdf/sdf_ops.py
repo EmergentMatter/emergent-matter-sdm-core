@@ -397,8 +397,10 @@ def op_shear_linear(sdf_fn, p, u_axis, u0, u1, dz0, dz1):
     becomes a clamped ramp whose far end sits ``h`` higher: exactly the
     octagon profile of a plate spanning one stage.
 
-    Inverse-mapping the query makes the result a distance BOUND, not an exact
-    distance, inside the ramp; see ``sdf/lipschitz.py`` for the factor.
+    Inverse-mapping the query stretches space by the shear's largest singular
+    value inside the ramp, so the child's value is divided by it (see
+    :func:`shear_linear_scale`). The result never over-reports; outside the
+    ramp, where nothing is stretched, it under-reports by the same factor.
 
     Args:
         sdf_fn: The child field, evaluated at the mapped query point.
@@ -413,7 +415,21 @@ def op_shear_linear(sdf_fn, p, u_axis, u0, u1, dz0, dz1):
         jnp.ndarray: The child's distance at the mapped point.
     """
     rise = shear_linear_offset(p, u_axis, u0, u1, dz0, dz1)
-    return sdf_fn(p - jnp.stack([jnp.zeros_like(rise), jnp.zeros_like(rise), rise], axis=-1))
+    q = p - jnp.stack([jnp.zeros_like(rise), jnp.zeros_like(rise), rise], axis=-1)
+    return sdf_fn(q) * shear_linear_scale(u0, u1, dz0, dz1)
+
+
+def shear_linear_scale(u0, u1, dz0, dz1):
+    """The factor that keeps ``shear_linear`` from over-reporting.
+
+    The query map is ``I - e_z (k n)^T`` inside the ramp, a pure shear with
+    slope ``k = (dz1 - dz0) / (u1 - u0)`` along the unit ramp direction ``n``.
+    Its largest singular value is ``(|k| + sqrt(k^2 + 4)) / 2`` (not
+    ``sqrt(1 + k^2)``), and this returns the reciprocal. Mirrored by
+    ``op_shear_linear_scale`` in ``glsl/lib.glsl``.
+    """
+    k = (dz1 - dz0) / (u1 - u0)
+    return 2.0 / (jnp.abs(k) + jnp.sqrt(k * k + 4.0))
 
 
 def taper_linear_factor(p, z0, z1, s0, s1):
@@ -427,8 +443,14 @@ def op_taper_linear(sdf_fn, p, z0, z1, s0, s1):
 
     The factor is ``s0`` up to ``z0``, ``s1`` from ``z1`` on, linear between;
     the query's XY is divided by it, so the MATERIAL grows by it. A cylinder
-    tapered from 1 to 0.5 over its length is a cone frustum. The result is a
-    distance BOUND (see ``sdf/lipschitz.py``); factors must stay positive.
+    tapered from 1 to 0.5 over its length is a cone frustum. Factors must stay
+    positive.
+
+    Dividing the query by ``s`` alone stretches distances by ``1/s``, so the
+    child's value is multiplied by ``min(s0, s1, 1)`` (see
+    :func:`taper_linear_scale`). What remains is the stretch from ``s`` varying
+    along Z, which grows with distance from the axis; ``sdf/lipschitz.py``
+    bounds it over an evaluation domain.
 
     Args:
         sdf_fn: The child field, evaluated at the mapped query point.
@@ -442,12 +464,26 @@ def op_taper_linear(sdf_fn, p, z0, z1, s0, s1):
         jnp.ndarray: The child's distance at the mapped point.
     """
     s = taper_linear_factor(p, z0, z1, s0, s1)
-    return sdf_fn(jnp.stack([p[..., 0] / s, p[..., 1] / s, p[..., 2]], axis=-1))
+    q = jnp.stack([p[..., 0] / s, p[..., 1] / s, p[..., 2]], axis=-1)
+    return sdf_fn(q) * taper_linear_scale(s0, s1)
 
 
-def op_displace(sdf_fn, displacement_fn, p):
-    """Displace a surface by an arbitrary scalar field."""
-    return sdf_fn(p) + displacement_fn(p)
+def taper_linear_scale(s0, s1):
+    """``min(s0, s1, 1)``: the factor that removes ``taper_linear``'s ``1/s``
+    stretch. Mirrored by ``op_taper_linear_scale`` in ``glsl/lib.glsl``."""
+    return jnp.minimum(jnp.minimum(s0, s1), 1.0)
+
+
+def op_displace(sdf_fn, displacement_fn, p, field_rate=0.0):
+    """Displace a surface, preserving a unit-rate child's conservative bound.
+
+    For a unit-rate child, ``sdf + field`` changes by up to ``1 + field_rate``
+    per unit of travel, so it is divided by that. This need not be a true distance.
+    ``field_rate`` bounds ``|grad field|``; the compiler
+    passes 0 for a field with no finite bound (``angular``), which leaves the
+    sum undivided and ``infer_sdf_max_rate`` reporting it as unknown.
+    """
+    return (sdf_fn(p) + displacement_fn(p)) / (1.0 + field_rate)
 
 
 # ===========================================================================
@@ -875,13 +911,37 @@ def loft_shape(verts_sections, zs, p, smooth=False):
             + (-2 * t3 + 3 * t2) * V1
             + (t3 - t2) * hseg * m1
         )
-    d2d = _poly_sdf_batched(p[..., :2], Vq)
+    # The outline moves along Z, so the distance to it climbs by up to
+    # sqrt(1 + S^2) per unit of travel, with S the fastest any vertex moves per
+    # unit of Z (three times that under monotone PCHIP, whose derivative never
+    # exceeds three secants). Dividing by that constant, not pointwise, is what
+    # keeps the quotient's own derivative out of it; see bellows.
+    S = loft_shape_speed(V, zs, smooth)
+    H = jnp.sqrt(1.0 + S * S)
+    d2d = _poly_sdf_batched(p[..., :2], Vq) / H
     zc = (zs[0] + zs[-1]) * 0.5
     # abs() guards a mis-ordered (e.g. param-driven) span from going negative,
     # which would silently make the cap empty everywhere; see loft() docstring.
     h = jnp.abs(zs[-1] - zs[0]) * 0.5
     w = jnp.stack([d2d, jnp.abs(z - zc) - h], axis=-1)
-    return jnp.minimum(jnp.max(w, axis=-1), 0.0) + _length(jnp.maximum(w, 0.0))
+    # The profile's gradient now has a Z component of up to S / H, so it is no
+    # longer orthogonal to the cap's, and the corner combine can reach
+    # sqrt(1 + S / H). Exact (a divisor of 1) for identical sections.
+    corner = jnp.minimum(jnp.max(w, axis=-1), 0.0) + _length(jnp.maximum(w, 0.0))
+    return corner / jnp.sqrt(1.0 + S / H)
+
+
+def loft_shape_speed(V, zs, smooth):
+    """Fastest any outline vertex moves per unit of Z, over every span.
+
+    ``V`` is ``(n_sections, N, 2)``. Tripled under ``smooth``: a monotone PCHIP
+    interpolant's derivative never exceeds three times the secant. Mirrored in
+    ``glsl/emit.py`` (``_loft_shape_body``).
+    """
+    step = jnp.max(_length(V[1:] - V[:-1]), axis=-1)
+    dz = jnp.maximum(jnp.abs(zs[1:] - zs[:-1]), 1e-12)
+    speed = jnp.max(step / dz)
+    return 3.0 * speed if smooth else speed
 
 
 def loft_shape_curve(ctrl_sections, zs, p, kind, samples, smooth=False):

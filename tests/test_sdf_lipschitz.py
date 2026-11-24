@@ -32,7 +32,7 @@ from software_defined_matter import (
 )
 from software_defined_matter.sdf.compile import make_sdf_closure
 from software_defined_matter.sdf.lipschitz import UNKNOWN, infer_sdf_max_rate
-from software_defined_matter.sdf.sdf_ops import op_twist
+from software_defined_matter.sdf.sdf_ops import op_twist, shear_linear_scale
 
 SEED = 0
 N_SAMPLES = 30_000
@@ -164,7 +164,8 @@ def test_bend_bound_covers_the_measured_rate(k):
 
 @pytest.mark.parametrize("amplitude,freq", [(0.2, 0.1), (0.5, 0.3), (1.0, 0.5)])
 def test_displace_bound_covers_the_measured_rate(amplitude, freq):
-    """``sdf(p) + field(p)``: the gradients add, so the bounds add."""
+    """``(sdf(p) + field(p)) / (1 + L)``: the op divides out the field's slope
+    bound, so the sum is unit rate whatever the field's amplitude."""
     tree = {
         "type": "deform",
         "deform": "displace",
@@ -176,8 +177,7 @@ def test_displace_bound_covers_the_measured_rate(amplitude, freq):
         },
     }
     inferred, _measured = _assert_bounds(tree, 9.0)
-    expected = 1.0 + amplitude * 2.0 * math.pi * math.sqrt(3.0) * freq
-    assert inferred == pytest.approx(expected, rel=1e-9)
+    assert inferred == pytest.approx(1.0, rel=1e-9)
 
 
 def test_twist_bound_grows_with_the_domain():
@@ -452,9 +452,10 @@ def test_shear_linear_bound_covers_the_measured_gradient():
         "shear_linear", sdf_primitive("sphere", r=1.0),
         u0=-1.0, u1=1.0, dz_0=0.0, dz_1={"$ref": "h"},
     )  # fmt: skip
-    bound = infer_sdf_max_rate(node, part)
-    k = 6.0 / 2.0  # steepest slope: the top of h over the ramp width
-    assert bound == pytest.approx((k + math.sqrt(k * k + 4.0)) / 2.0)
+    # The op divides by the stretch at its actual slope, so the child's rate
+    # carries through for every h in its bounds.
+    assert infer_sdf_max_rate(node, part) == pytest.approx(1.0)
+    bound = 1.0
 
     steep = Part(name="steep", params={"h": Param("h", 6.0, free=True, bounds=(1.0, 6.0))})
     f = make_sdf_closure(node, steep)
@@ -466,7 +467,11 @@ def test_shear_linear_bound_covers_the_measured_gradient():
     ]
     measured = float(np.max(np.linalg.norm(np.stack(grads, -1), axis=-1)))
     assert measured <= bound * 1.01
-    assert measured > 1.5  # the bound is not vacuous: a shear really stretches
+    # Without the divisor this shear climbs at (k + sqrt(k^2 + 4)) / 2 = 3.30.
+    k = 6.0 / 2.0
+    assert float(shear_linear_scale(-1.0, 1.0, 0.0, 6.0)) == pytest.approx(
+        2.0 / (k + math.sqrt(k * k + 4.0)), rel=1e-6
+    )
 
 
 def test_shear_linear_ramp_with_no_width_has_no_bound():

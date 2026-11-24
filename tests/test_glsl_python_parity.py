@@ -41,6 +41,7 @@ from software_defined_matter import (
     make_param_ref,
     sdf_2d_to_3d,
     sdf_deform,
+    sdf_loft,
     sdf_modifier,
     sdf_op,
     sdf_primitive,
@@ -336,7 +337,9 @@ def test_emitted_radial_field_with_refs_matches_jax():
     points = _ring_points(n_theta=73, radii=(0.0, 0.2, 1.1, 2.8), z=(-0.4, 0.7))
     radius = np.linalg.norm(points[..., :2], axis=-1)
     field = 0.4 * np.sin(2.0 * np.pi * 0.35 * radius + 0.2)
-    glsl = np.linalg.norm(points, axis=-1) - 2.0 + field
+    # displace divides by 1 + the field's slope bound, here 2 pi f |A|.
+    assert "/ (1.0 + (abs(u_p_amplitude) * 6.283185307179586 * abs(u_p_frequency)))" in emitted
+    glsl = (np.linalg.norm(points, axis=-1) - 2.0 + field) / (1.0 + 2.0 * np.pi * 0.35 * 0.4)
     jax = make_sdf_closure(tree, part)(jnp.asarray(points))
     np.testing.assert_allclose(glsl, np.asarray(jax), rtol=1e-5, atol=1e-5)
 
@@ -371,7 +374,13 @@ def test_emitted_sin_xyz_field_with_refs_matches_jax():
     points = np.asarray([[-1.2, 0.3, 0.7], [0.0, 0.0, 0.0], [0.8, -0.5, 1.4], [2.1, 1.3, -0.9]])
     arg = 2.0 * np.pi * np.asarray([0.2, 0.3, 0.4]) * points + [0.15, 0.4, -0.2]
     field = 0.25 * np.prod(np.sin(arg), axis=-1)
-    glsl = np.linalg.norm(points, axis=-1) - 2.0 + field
+    # displace divides by 1 + the field's slope bound, here 2 pi |A| |f|.
+    assert (
+        "/ (1.0 + (abs(u_p_amplitude) * 6.283185307179586 * length(vec3(u_p_fx, u_p_fy, u_p_fz))))"
+        in emitted
+    )
+    rate = 0.25 * 2.0 * np.pi * np.linalg.norm([0.2, 0.3, 0.4])
+    glsl = (np.linalg.norm(points, axis=-1) - 2.0 + field) / (1.0 + rate)
     jax = make_sdf_closure(tree, part)(jnp.asarray(points))
     np.testing.assert_allclose(glsl, np.asarray(jax), rtol=1e-5, atol=1e-5)
 
@@ -1038,6 +1047,29 @@ _REVALUED = {
     "elongate-2d": (
         sdf_2d_to_3d("extrusion", sdf_modifier("elongate", sdf_primitive("circle_2d", r=0.5),
                                                h=[1.5, 1.0]), h=0.7), 3.0),
+    "taper_linear": (
+        sdf_deform("taper_linear", sdf_primitive("box", b=[1.0, 1.0, 1.5]),
+                   z0=-1.5, z1=1.5, s_0=1.0, s_1=0.4), 2.5),
+    "shear_linear": (
+        sdf_deform("shear_linear", sdf_primitive("box", b=[2.0, 0.8, 0.3]),
+                   axis=[1.0, 0.0], u0=-1.5, u1=1.5, dz_0=-1.0, dz_1=1.0), 3.0),
+    "displace-sin_xyz": (
+        sdf_deform("displace", sdf_primitive("sphere", r=2.0),
+                   field=field_primitive("sin_xyz", freq=[0.3, 0.2, 0.4], amplitude=0.4)), 3.0),
+    "displace-radial-plus-sin": (
+        sdf_deform("displace", sdf_primitive("sphere", r=2.0),
+                   field={"type": "field_op", "op": "add", "children": [
+                       field_primitive("radial", freq=0.5, amplitude=0.2),
+                       field_primitive("sin_xyz", freq=[0.3, 0.3, 0.3], amplitude=0.1)]}), 3.0),
+    "loft_shape-linear": (
+        sdf_loft([sdf_primitive("polygon_2d", vertices=_sq(2.0)),
+                  sdf_primitive("polygon_2d", vertices=_sq(0.7))], z=[-1.0, 1.0],
+                 interp="shape"), 3.0),
+    "loft_shape-smooth": (
+        sdf_loft([sdf_primitive("polygon_2d", vertices=_sq(2.0)),
+                  sdf_primitive("polygon_2d", vertices=_sq(1.2)),
+                  sdf_primitive("polygon_2d", vertices=_sq(0.7))], z=[-1.0, 0.2, 1.0],
+                 interp="shape", smooth=True), 3.0),
     "screw_thread-coarse": (
         sdf_primitive("screw_thread", r_root=2.0, depth=1.5, pitch=12.0, width=5.0,
                       n_turns=2.0, phase=0.0, handedness=1.0, flank_deg=60.0), 4.5),
@@ -1094,3 +1126,101 @@ def test_zero_plane_normal_fallback_matches_executed_glsl(shader_runtime):
     points = np.array([[0, 0, 0], [1, 2, 3]], dtype=np.float32)
     values = shader_runtime.evaluate(emit_glsl(_part(tree)), points)[:, 3]
     np.testing.assert_allclose(values, 1, atol=2e-6, rtol=0)
+
+
+_FIELD_RATE_CASES = {
+    "sin-scalar": field_primitive(
+        "sin_xyz", freq=make_param_ref("frequency"), amplitude=make_param_ref("amplitude")
+    ),
+    "sin-vector": field_primitive(
+        "sin_xyz",
+        freq=[make_param_ref("frequency"), -0.7, 0.2],
+        amplitude=make_param_ref("amplitude"),
+    ),
+    "radial": field_primitive(
+        "radial", freq=make_param_ref("frequency"), amplitude=make_param_ref("amplitude")
+    ),
+    "angular": field_primitive(
+        "angular", freq=make_param_ref("frequency"), amplitude=make_param_ref("amplitude")
+    ),
+    "default-amplitude": field_primitive("sin_xyz", freq=0.4),
+}
+_FIELD_RATE_CASES["nested-sum"] = {
+    "type": "field_op",
+    "op": "add",
+    "children": [
+        _FIELD_RATE_CASES["sin-vector"],
+        {
+            "type": "field_op",
+            "op": "add",
+            "children": [_FIELD_RATE_CASES["radial"], _FIELD_RATE_CASES["default-amplitude"]],
+        },
+    ],
+}
+_FIELD_RATE_CASES["unknown-sum"] = {
+    "type": "field_op",
+    "op": "add",
+    "children": [
+        _FIELD_RATE_CASES["radial"],
+        _FIELD_RATE_CASES["angular"],
+    ],
+}
+
+
+def test_field_rate_coverage_gate_includes_every_registered_field():
+    from software_defined_matter.sdf.compile import _FIELD_PRIMITIVES
+
+    covered = {node["kind"] for node in _FIELD_RATE_CASES.values() if node["type"] == "field"}
+    assert covered == set(_FIELD_PRIMITIVES) == set(_FIELD_SPECS)
+
+
+@pytest.mark.parametrize("case", _FIELD_RATE_CASES, ids=list(_FIELD_RATE_CASES))
+def test_field_rate_contract_agrees_with_jit_and_executed_shader(shader_runtime, case):
+    import jax
+
+    from software_defined_matter.dsl.resolve import make_binding
+    from software_defined_matter.sdf.bbox import build_param_intervals
+    from software_defined_matter.sdf.compile import _compile_field_node, _compile_field_rate
+    from software_defined_matter.sdf.lipschitz import _field_rate, infer_sdf_max_rate
+
+    field = _FIELD_RATE_CASES[case]
+    tree = sdf_deform("displace", sdf_primitive("sphere", r=2.0), field=field)
+    params = {
+        "frequency": Param("frequency", 0.3, free=True, bounds=(-2.0, 2.0)),
+        "amplitude": Param("amplitude", 0.5, free=True, bounds=(-0.5, 0.5)),
+    }
+    part = Part(
+        name="field-rate-contract",
+        params=params,
+        materials=[MaterialRegion(material_id=1, name="m", sdf_tree=tree)],
+        metadata={"bbox": [[-4, -4, -4], [4, 4, 4]]},
+    )
+    binding = make_binding(part)
+    rate_fn = _compile_field_rate(field, binding)
+    field_fn = jax.jit(_compile_field_node(field, binding))
+    evaluate = jax.jit(make_sdf_closure(tree, part))
+    emission = emit_glsl(part)
+    upper = _field_rate(field, build_param_intervals(part, mode="bounds"))
+    unknown = case in {"angular", "unknown-sum"}
+    assert (rate_fn is None) == unknown == np.isinf(upper)
+    inferred = infer_sdf_max_rate(tree, part)
+    assert np.isinf(inferred) if unknown else inferred == pytest.approx(1.0, abs=1e-12)
+    points = np.array([[0.3, 0.7, -0.9], [-1.2, 0.4, 0.6], [2.7, -0.3, 1.1]], dtype=np.float32)
+    child = np.linalg.norm(points, axis=-1) - 2.0
+    for amplitude, frequency in [(0.5, 2.0), (-0.5, -2.0), (0.0, 0.7), (0.2, 0.0), (0.1, -0.4)]:
+        values = {"amplitude": amplitude, "frequency": frequency}
+        free = jnp.asarray([values[name] for name in part.free_param_names()], dtype=jnp.float32)
+        intervals = {name: (value, value) for name, value in values.items()}
+        current = _field_rate(field, intervals)
+        divisor = 1.0
+        if rate_fn is not None:
+            rate = float(jax.jit(rate_fn)(free))
+            # Float32 evaluation may differ from the Python bound by a few ulps.
+            assert rate == pytest.approx(current, rel=2e-6, abs=2e-6)
+            assert rate <= upper + 2e-6
+            divisor += rate
+        expected = (child + np.asarray(field_fn(jnp.asarray(points), free))) / divisor
+        uniforms = {"u_p_amplitude": amplitude, "u_p_frequency": frequency}
+        shader = shader_runtime.evaluate(emission, points, uniforms=uniforms)[:, 3]
+        np.testing.assert_allclose(evaluate(points, free), expected, rtol=2e-5, atol=2e-5)
+        np.testing.assert_allclose(shader, expected, rtol=2e-5, atol=2e-5)

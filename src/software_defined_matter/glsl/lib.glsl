@@ -233,6 +233,12 @@ vec3 op_taper_linear(vec3 p, float z0, float z1, float s0, float s1) {
     return vec3(p.x / s, p.y / s, p.z);
 }
 
+float op_taper_linear_scale(float s0, float s1) {
+    // min(s0, s1, 1), which removes the taper's 1/s stretch. The scene
+    // multiplies the child's value by it. Mirrors ops.taper_linear_scale.
+    return min(min(s0, s1), 1.0);
+}
+
 vec3 op_shear_linear(vec3 p, vec2 uAxis, float u0, float u1,
                      float dz0, float dz1) {
     // Clamped linear ramp SHEAR along +Z: the child's material at height z
@@ -245,6 +251,13 @@ vec3 op_shear_linear(vec3 p, vec2 uAxis, float u0, float u1,
     float t = clamp((dot(p.xy, ax) - u0) / (u1 - u0), 0.0, 1.0);
     float rise = dz0 + (dz1 - dz0) * t;
     return vec3(p.x, p.y, p.z - rise);
+}
+
+float op_shear_linear_scale(float u0, float u1, float dz0, float dz1) {
+    // The reciprocal of the shear's largest singular value; the scene
+    // multiplies the child's value by it. Mirrors ops.shear_linear_scale.
+    float k = (dz1 - dz0) / (u1 - u0);
+    return 2.0 / (abs(k) + sqrt(k * k + 4.0));
 }
 
 vec3 op_twist_linear(vec3 p, vec2 uAxis, float u0, float u1,
