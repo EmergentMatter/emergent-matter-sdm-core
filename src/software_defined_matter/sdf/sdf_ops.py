@@ -27,6 +27,7 @@ from software_defined_matter.sdf._helpers import (
     _clamp,
     _length,
     _mix,
+    _sqrt_safe,
     bezier_outline,
     bspline_outline,
 )
@@ -49,19 +50,31 @@ def op_intersect(d1, d2):
     return jnp.maximum(d1, d2)
 
 
+# The smooth booleans divide by ``k``. At ``k = 0`` they are the hard booleans;
+# without the guard ``(d2 - d1) / k`` is 0/0 wherever the children tie, and the
+# value is NaN. GLSL mirrors the guard.
+
+
+def _blend_k(k):
+    return jnp.where(k > 0.0, k, 1.0)
+
+
 def op_smooth_union(d1, d2, k):
-    h = _clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0)
-    return _mix(d2, d1, h) - k * h * (1.0 - h)
+    kk = _blend_k(k)
+    h = _clamp(0.5 + 0.5 * (d2 - d1) / kk, 0.0, 1.0)
+    return jnp.where(k > 0.0, _mix(d2, d1, h) - kk * h * (1.0 - h), jnp.minimum(d1, d2))
 
 
 def op_smooth_subtract(d1, d2, k):
-    h = _clamp(0.5 - 0.5 * (d2 + d1) / k, 0.0, 1.0)
-    return _mix(d1, -d2, h) + k * h * (1.0 - h)
+    kk = _blend_k(k)
+    h = _clamp(0.5 - 0.5 * (d2 + d1) / kk, 0.0, 1.0)
+    return jnp.where(k > 0.0, _mix(d1, -d2, h) + kk * h * (1.0 - h), jnp.maximum(d1, -d2))
 
 
 def op_smooth_intersect(d1, d2, k):
-    h = _clamp(0.5 - 0.5 * (d2 - d1) / k, 0.0, 1.0)
-    return _mix(d2, d1, h) + k * h * (1.0 - h)
+    kk = _blend_k(k)
+    h = _clamp(0.5 - 0.5 * (d2 - d1) / kk, 0.0, 1.0)
+    return jnp.where(k > 0.0, _mix(d2, d1, h) + kk * h * (1.0 - h), jnp.maximum(d1, d2))
 
 
 # ===========================================================================
@@ -208,12 +221,25 @@ def op_onion(d, thickness):
 
 
 def op_elongate(sdf_fn, p, h):
-    """Elongate a primitive along each axis by h = [hx, hy, hz]."""
+    """Elongate a primitive along each axis by h = [hx, hy, hz].
+
+    Inside the stretched core (``|p_i| < h_i`` on every axis) the query maps to
+    the child's origin, so the child alone would report one constant depth
+    there: a sphere elongated by ``[2, 2, 2]`` read -0.5 at its centre against
+    a true -2.5. Quilez's exact form adds how far the query is inside the core,
+    ``min(max_i(|p_i| - h_i), 0)``. It is added only where the child's value is
+    negative, so a child whose origin is outside it (a torus) keeps its zero
+    set. For a child symmetric about its origin the result is exact; otherwise
+    it is a lower bound, since the core is the box ``[-h, h]`` grown by the ball
+    of radius ``-child(0)`` that the child contains.
+    """
     p = jnp.asarray(p)
     h = jnp.asarray(h)
     _check_axis_vector("op_elongate.h", h, p)
     q = p - _clamp(p, -h, h)
-    return sdf_fn(q)
+    d = sdf_fn(q)
+    core = jnp.minimum(jnp.max(jnp.abs(p) - h, axis=-1), 0.0)
+    return d + jnp.where(d < 0.0, core, 0.0)
 
 
 # ===========================================================================
@@ -285,7 +311,7 @@ def op_twist_radial(sdf_fn, p, r0, r1, a0, a1):
     Returns:
         jnp.ndarray: The child's distance at the mapped point.
     """
-    r = jnp.sqrt(p[..., 0] ** 2 + p[..., 1] ** 2)
+    r = _length(p[..., :2])
     w = _hermite_ramp(jnp.clip((r - r0) / (r1 - r0), 0.0, 1.0))
     return sdf_fn(_rotate_z(p, -(a0 + (a1 - a0) * w)))
 
@@ -371,8 +397,10 @@ def op_shear_linear(sdf_fn, p, u_axis, u0, u1, dz0, dz1):
     becomes a clamped ramp whose far end sits ``h`` higher: exactly the
     octagon profile of a plate spanning one stage.
 
-    Inverse-mapping the query makes the result a distance BOUND, not an exact
-    distance, inside the ramp; see ``sdf/lipschitz.py`` for the factor.
+    Inverse-mapping the query stretches space by the shear's largest singular
+    value inside the ramp, so the child's value is divided by it (see
+    :func:`shear_linear_scale`). The result never over-reports; outside the
+    ramp, where nothing is stretched, it under-reports by the same factor.
 
     Args:
         sdf_fn: The child field, evaluated at the mapped query point.
@@ -387,7 +415,21 @@ def op_shear_linear(sdf_fn, p, u_axis, u0, u1, dz0, dz1):
         jnp.ndarray: The child's distance at the mapped point.
     """
     rise = shear_linear_offset(p, u_axis, u0, u1, dz0, dz1)
-    return sdf_fn(p - jnp.stack([jnp.zeros_like(rise), jnp.zeros_like(rise), rise], axis=-1))
+    q = p - jnp.stack([jnp.zeros_like(rise), jnp.zeros_like(rise), rise], axis=-1)
+    return sdf_fn(q) * shear_linear_scale(u0, u1, dz0, dz1)
+
+
+def shear_linear_scale(u0, u1, dz0, dz1):
+    """The factor that keeps ``shear_linear`` from over-reporting.
+
+    The query map is ``I - e_z (k n)^T`` inside the ramp, a pure shear with
+    slope ``k = (dz1 - dz0) / (u1 - u0)`` along the unit ramp direction ``n``.
+    Its largest singular value is ``(|k| + sqrt(k^2 + 4)) / 2`` (not
+    ``sqrt(1 + k^2)``), and this returns the reciprocal. Mirrored by
+    ``op_shear_linear_scale`` in ``glsl/lib.glsl``.
+    """
+    k = (dz1 - dz0) / (u1 - u0)
+    return 2.0 / (jnp.abs(k) + jnp.sqrt(k * k + 4.0))
 
 
 def taper_linear_factor(p, z0, z1, s0, s1):
@@ -401,8 +443,14 @@ def op_taper_linear(sdf_fn, p, z0, z1, s0, s1):
 
     The factor is ``s0`` up to ``z0``, ``s1`` from ``z1`` on, linear between;
     the query's XY is divided by it, so the MATERIAL grows by it. A cylinder
-    tapered from 1 to 0.5 over its length is a cone frustum. The result is a
-    distance BOUND (see ``sdf/lipschitz.py``); factors must stay positive.
+    tapered from 1 to 0.5 over its length is a cone frustum. Factors must stay
+    positive.
+
+    Dividing the query by ``s`` alone stretches distances by ``1/s``, so the
+    child's value is multiplied by ``min(s0, s1, 1)`` (see
+    :func:`taper_linear_scale`). What remains is the stretch from ``s`` varying
+    along Z, which grows with distance from the axis; ``sdf/lipschitz.py``
+    bounds it over an evaluation domain.
 
     Args:
         sdf_fn: The child field, evaluated at the mapped query point.
@@ -416,12 +464,26 @@ def op_taper_linear(sdf_fn, p, z0, z1, s0, s1):
         jnp.ndarray: The child's distance at the mapped point.
     """
     s = taper_linear_factor(p, z0, z1, s0, s1)
-    return sdf_fn(jnp.stack([p[..., 0] / s, p[..., 1] / s, p[..., 2]], axis=-1))
+    q = jnp.stack([p[..., 0] / s, p[..., 1] / s, p[..., 2]], axis=-1)
+    return sdf_fn(q) * taper_linear_scale(s0, s1)
 
 
-def op_displace(sdf_fn, displacement_fn, p):
-    """Displace a surface by an arbitrary scalar field."""
-    return sdf_fn(p) + displacement_fn(p)
+def taper_linear_scale(s0, s1):
+    """``min(s0, s1, 1)``: the factor that removes ``taper_linear``'s ``1/s``
+    stretch. Mirrored by ``op_taper_linear_scale`` in ``glsl/lib.glsl``."""
+    return jnp.minimum(jnp.minimum(s0, s1), 1.0)
+
+
+def op_displace(sdf_fn, displacement_fn, p, field_rate=0.0):
+    """Displace a surface, preserving a unit-rate child's conservative bound.
+
+    For a unit-rate child, ``sdf + field`` changes by up to ``1 + field_rate``
+    per unit of travel, so it is divided by that. This need not be a true distance.
+    ``field_rate`` bounds ``|grad field|``; the compiler
+    passes 0 for a field with no finite bound (``angular``), which leaves the
+    sum undivided and ``infer_sdf_max_rate`` reporting it as unknown.
+    """
+    return (sdf_fn(p) + displacement_fn(p)) / (1.0 + field_rate)
 
 
 # ===========================================================================
@@ -611,6 +673,12 @@ def sweep(profile2d_fn, path_pts, p, closed=False, frame="rmf", normal0=None):
                    ignored for ``"cylindrical"``). Projected perpendicular to the
                    first tangent so a swept ribbon can start in a chosen
                    orientation (e.g. radial, to continue a winding's cross-section).
+
+    Interior end-cap distances are independent of the chosen segment. Each
+    finite cap face is restricted to the region where its endpoint segment is
+    nearest, so a cap hidden by another leg does not create an internal surface.
+    This restriction is a conservative distance bound, not an exact distance
+    to the clipped face. Straight paths retain exact cap depths after subdivision.
     """
     A, that, L, N, Bf = _sweep_frames(path_pts, closed, frame, normal0)
 
@@ -652,16 +720,39 @@ def sweep(profile2d_fn, path_pts, p, closed=False, frame="rmf", normal0=None):
     over_lo = -s_star
     over_hi = s_star - L[istar]
     over = jnp.maximum(over_lo, over_hi)  # >0 iff foot clamped
+    no_cap = jnp.full_like(over, -1.0e9)
     if closed:
         flat = jnp.zeros(over.shape, dtype=bool)
+        d_ax = no_cap
     else:
         n_seg = A.shape[0]
         flat = ((istar == 0) & (over_lo > 0.0)) | ((istar == n_seg - 1) & (over_hi > 0.0))
+        d_ax = jnp.where(flat, over, no_cap)
     d2d = profile2d_fn(_sweep_joint(jnp.stack([u, v], axis=-1), over, flat))
-    d_ax = jnp.where(flat & (over > 0.0), over, jnp.full_like(over, -1.0e9))
-    return jnp.sqrt(jnp.maximum(d2d, 0.0) ** 2 + jnp.maximum(d_ax, 0.0) ** 2) + jnp.minimum(
-        jnp.maximum(d2d, d_ax), 0.0
-    )
+    outside = jnp.stack([jnp.maximum(d2d, 0.0), jnp.maximum(d_ax, 0.0)], axis=-1)
+    # _length, not a bare sqrt: both terms are 0 everywhere inside, where the
+    # derivative of sqrt is infinite and autodiff returned NaN.
+    d = _length(outside) + jnp.minimum(jnp.maximum(d2d, d_ax), 0.0)
+    if not closed:
+        # Interior cap distance must not depend on the winning segment. Measure
+        # to the filled profile in each endpoint plane, not the infinite plane:
+        # a bent path can cross a cap's plane far outside the actual cap face.
+        nearest = _length(jnp.take_along_axis(perp, istar[..., None, None], axis=-2)[..., 0, :])
+        for i, origin in ((0, A[0]), (-1, A[-1] + L[-1] * that[-1])):
+            delta = p - origin
+            uv = jnp.stack(
+                [jnp.sum(delta * N[i], axis=-1), jnp.sum(delta * Bf[i], axis=-1)], axis=-1
+            )
+            axial = jnp.sum(delta * that[i], axis=-1)
+            cap_distance = _length(jnp.stack([jnp.maximum(profile2d_fn(uv), 0.0), axial], -1))
+            # The cap is exposed only where its endpoint segment is nearest.
+            # Each segment distance is 1-Lipschitz, so half their difference
+            # bounds distance to that region. Intersecting this bound with the
+            # finite face avoids inserting a zero sheet into an overlapping leg.
+            hidden = jnp.maximum((_length(perp[..., i, :]) - nearest) * 0.5, 0.0)
+            cap_distance = jnp.maximum(cap_distance, hidden)
+            d = jnp.maximum(d, -cap_distance)
+    return d
 
 
 def _sweep_joint(uv, over, flat):
@@ -793,7 +884,7 @@ def _poly_sdf_batched(p2d, v):
     c3 = (e[..., 0] * w[..., 1]) > (e[..., 1] * w[..., 0])
     flip = (c1 & c2 & c3) | (~c1 & ~c2 & ~c3)
     inside = (jnp.sum(flip.astype(jnp.int32), axis=-1) % 2) == 1
-    return jnp.where(inside, -1.0, 1.0) * jnp.sqrt(d)
+    return jnp.where(inside, -1.0, 1.0) * _sqrt_safe(d)
 
 
 def loft_shape(verts_sections, zs, p, smooth=False):
@@ -849,13 +940,37 @@ def loft_shape(verts_sections, zs, p, smooth=False):
             + (-2 * t3 + 3 * t2) * V1
             + (t3 - t2) * hseg * m1
         )
-    d2d = _poly_sdf_batched(p[..., :2], Vq)
+    # The outline moves along Z, so the distance to it climbs by up to
+    # sqrt(1 + S^2) per unit of travel, with S the fastest any vertex moves per
+    # unit of Z (three times that under monotone PCHIP, whose derivative never
+    # exceeds three secants). Dividing by that constant, not pointwise, is what
+    # keeps the quotient's own derivative out of it; see bellows.
+    S = loft_shape_speed(V, zs, smooth)
+    H = jnp.sqrt(1.0 + S * S)
+    d2d = _poly_sdf_batched(p[..., :2], Vq) / H
     zc = (zs[0] + zs[-1]) * 0.5
     # abs() guards a mis-ordered (e.g. param-driven) span from going negative,
     # which would silently make the cap empty everywhere; see loft() docstring.
     h = jnp.abs(zs[-1] - zs[0]) * 0.5
     w = jnp.stack([d2d, jnp.abs(z - zc) - h], axis=-1)
-    return jnp.minimum(jnp.max(w, axis=-1), 0.0) + _length(jnp.maximum(w, 0.0))
+    # The profile's gradient now has a Z component of up to S / H, so it is no
+    # longer orthogonal to the cap's, and the corner combine can reach
+    # sqrt(1 + S / H). Exact (a divisor of 1) for identical sections.
+    corner = jnp.minimum(jnp.max(w, axis=-1), 0.0) + _length(jnp.maximum(w, 0.0))
+    return corner / jnp.sqrt(1.0 + S / H)
+
+
+def loft_shape_speed(V, zs, smooth):
+    """Fastest any outline vertex moves per unit of Z, over every span.
+
+    ``V`` is ``(n_sections, N, 2)``. Tripled under ``smooth``: a monotone PCHIP
+    interpolant's derivative never exceeds three times the secant. Mirrored in
+    ``glsl/emit.py`` (``_loft_shape_body``).
+    """
+    step = jnp.max(_length(V[1:] - V[:-1]), axis=-1)
+    dz = jnp.maximum(jnp.abs(zs[1:] - zs[:-1]), 1e-12)
+    speed = jnp.max(step / dz)
+    return 3.0 * speed if smooth else speed
 
 
 def loft_shape_curve(ctrl_sections, zs, p, kind, samples, smooth=False):

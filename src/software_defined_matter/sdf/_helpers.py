@@ -1,8 +1,9 @@
 """Internal helpers shared by ``sdf_shapes``, ``sdf_ops``, and ``transforms``.
 
-``_length`` and ``_azimuth`` each carry a hand-written Jacobian Vector Product (JVP)
- definition via ``custom_jvp`` so that gradients through, respectively,
- ``sqrt(sum(x**2))`` and ``atan2(y, x)`` are well-defined on the Z axis.
+``_length``, ``_sqrt_safe`` and ``_azimuth`` each carry a hand-written Jacobian
+ Vector Product (JVP) definition via ``custom_jvp`` so that gradients through,
+ respectively, ``sqrt(sum(x**2))``, ``sqrt(x)`` and ``atan2(y, x)`` are
+ well-defined where the argument is zero or on the Z axis.
  This module is the single home for those definitions: duplicating them elsewhere
  would create distinct JVP rules and silently break gradients.
 """
@@ -21,8 +22,32 @@ def _length_jvp(primals, tangents):
     (v,), (v_dot,) = primals, tangents
     primal_out = _length(v)
     sq_norm = jnp.sum(v**2, axis=-1)
-    inv_norm = jnp.where(sq_norm > 0.0, jax.lax.rsqrt(sq_norm), 0.0)
+    safe = jnp.where(sq_norm > 0.0, sq_norm, 1.0)
+    inv_norm = jnp.where(sq_norm > 0.0, jax.lax.rsqrt(safe), 0.0)
     tangent_out = jnp.sum(v * v_dot, axis=-1) * inv_norm
+    return primal_out, tangent_out
+
+
+@jax.custom_jvp
+def _sqrt_safe(x):
+    """``sqrt(x)`` for a squared distance, with a derivative that is 0 at ``x = 0``.
+
+    Evaluators that take the minimum of squared distances and then one square
+    root reach ``x = 0`` exactly on their own surface, where the true derivative
+    of ``sqrt`` is infinite and the derivative of ``x`` is 0. Autodiff multiplies
+    the two and gets NaN, which then poisons every gradient summed over a grid
+    that samples the surface. The value is unchanged; see ``_length`` for the
+    vector form.
+    """
+    return jnp.sqrt(x)
+
+
+@_sqrt_safe.defjvp
+def _sqrt_safe_jvp(primals, tangents):
+    (x,), (x_dot,) = primals, tangents
+    primal_out = _sqrt_safe(x)
+    safe = jnp.where(x > 0.0, x, 1.0)
+    tangent_out = x_dot * jnp.where(x > 0.0, 0.5 * jax.lax.rsqrt(safe), 0.0)
     return primal_out, tangent_out
 
 

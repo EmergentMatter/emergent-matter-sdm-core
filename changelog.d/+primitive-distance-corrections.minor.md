@@ -1,0 +1,1 @@
+Normalize plane equations in JAX and GLSL, including tiny and large float32 normals, while preserving their zero sets. Correct pyramid interior distances near the base and elongation's interior core term. These value corrections can change geometry when composed with rounding, shells, or smooth booleans. Degenerate zero plane normals do not define a plane.

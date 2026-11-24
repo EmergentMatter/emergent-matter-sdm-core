@@ -403,6 +403,47 @@ STRESS_VARIANTS.update(
             ),
         ],
         "screw_thread": [
+            (
+                {
+                    "r_root": 2.0,
+                    "depth": 0.1,
+                    "pitch": 12.0,
+                    "width": 1.0,
+                    "n_turns": 2.0,
+                    "phase": 0.0,
+                    "handedness": 1.0,
+                    "flank_deg": 60.0,
+                },
+                4.5,
+            ),
+            # A coarse lead, where cos(lead) varying with radius made the flank
+            # climb 1.35x near the surface and 2.09x in the bore (#36).
+            (
+                {
+                    "r_root": 2.0,
+                    "depth": 1.5,
+                    "pitch": 12.0,
+                    "width": 5.0,
+                    "n_turns": 2.0,
+                    "phase": 0.0,
+                    "handedness": 1.0,
+                    "flank_deg": 60.0,
+                },
+                4.5,
+            ),
+            (
+                {
+                    "r_root": 3.0,
+                    "depth": 1.5,
+                    "pitch": 6.0,
+                    "width": 3.0,
+                    "n_turns": 3.0,
+                    "phase": 0.0,
+                    "handedness": 1.0,
+                    "flank_deg": 60.0,
+                },
+                5.5,
+            ),
             # The spherical-bearing cap thread from test_sdf_screw_thread.py.
             (
                 {
@@ -441,19 +482,11 @@ STRESS_VARIANTS.update(
 # --- Known primitive failures, by name, each with its cause -----------------
 
 # Primitives known to over-report near the surface, with the cause. Empty since
-# #108 closed. ``test_known_over_reporting_list_is_current`` fails if an entry
-# here has actually been fixed, so the list cannot rot; add to it only to record
-# a defect that is genuinely still open.
-KNOWN_OVER_REPORTING: dict[str, str] = {
-    "plane": "dot(p, n) + h with n as authored: changes by |n| per unit (#31)",
-}
-
-# Of the above, those whose rate depends on a parameter rather than on the kind.
-# ``infer_sdf_max_rate`` cannot list them in its per-kind table, so they are
-# excused from matching it; its module docstring states each one instead.
-PARAMETER_DEPENDENT_RATE: dict[str, str] = {
-    "plane": "exact for a unit normal; the rate is |n| (#31)",
-}
+# #36 made ``plane`` exact for a normal of any length. The
+# ``test_known_over_reporting_list_is_current`` check fails if an entry here has
+# actually been fixed, so the list cannot rot; add to it only to record a defect
+# that is genuinely still open.
+KNOWN_OVER_REPORTING: dict[str, str] = {}
 
 # Primitives that are correct at the surface but knowingly over-report
 # elsewhere, with the reason. Exempt from the whole-domain check only.
@@ -478,7 +511,6 @@ KNOWN_BOUNDS: dict[str, str] = {
 # the primitive and ``test_known_value_jumps_list_is_current`` fails until the
 # entry here, and its rate declaration in ``sdf/lipschitz.py``, are deleted.
 KNOWN_VALUE_JUMPS: dict[str, str] = {
-    "pyramid": "measures to the slanted faces only, never to the base square (#30)",
     "helix": "on its own axis the value depends on the approach azimuth; see KNOWN_BOUNDS",
 }
 
@@ -498,6 +530,7 @@ KNOWN_UNDER_REPORTING: dict[str, str] = {
     "serpentine": "divided by the steepest centreline slope, so slow where it is flatter (#40)",
     "helix":      "the k_wall divisor that holds the wall rate to 1 at steep lead; see "
                   "KNOWN_BOUNDS",
+    "screw_thread": "the k_flank divisor that holds the rate to 1 at coarse lead",
 }
 
 # Primitives whose value is not a distance on the named side(s) of the surface:
@@ -511,23 +544,15 @@ KNOWN_NOT_DISTANCES: dict[str, tuple[frozenset[str], str]] = {
     "annular_sector": (_OUTSIDE, "max of half-spaces: short near its edges outside (#38)"),
     "tri_prism":      (_OUTSIDE, "max of half-spaces: short near its edges outside (#38)"),
     "notch_hinge":    (_OUTSIDE, "box minus two cylinders: short near the notch rims (#38)"),
-    "screw_thread":   (_OUTSIDE, "max of half-planes in the tooth frame: short near the "
-                                 "tooth corners (#38)"),
+    "screw_thread":   (_BOTH, "max of half-planes in the tooth frame, short near the tooth "
+                              "corners (#38); and the k_flank divisor, short at the flanks"),
     "box_frame":      (_INSIDE, "union of three edge boxes: min is short inside (#37)"),
-    "plane":          (_BOTH, "a non-unit normal scales the value by |n| (#31)"),
 }
 
 # Primitives with a non-finite value or gradient, on random samples or on the
-# round-number grid. A bare sqrt of a squared distance that is exactly 0 on an
-# edge, face or cap (#36).
-KNOWN_NONFINITE: dict[str, str] = {
-    "polygon_2d":   "sqrt of the squared edge distance; NaN on an edge (#36)",
-    "bezier_2d":    "evaluated through polygon_2d (#36)",
-    "bspline_2d":   "evaluated through polygon_2d (#36)",
-    "trapezoid_2d": "sqrt of the squared distance; NaN on its boundary (#36)",
-    "cone":         "sqrt of the squared distance; NaN on its surface (#36)",
-    "capped_cone":  "sqrt of the squared distance; NaN on its caps (#36)",
-}
+# round-number grid. Empty since #36: a bare sqrt of a squared distance that is
+# exactly 0 on a surface is the usual cause, and ``_sqrt_safe`` the fix.
+KNOWN_NONFINITE: dict[str, str] = {}
 # fmt: on
 
 
@@ -739,6 +764,21 @@ def test_capped_torus_is_finite_on_its_centreline():
     assert bool(jnp.all(values >= -rb - FLOAT32_ATOL))
 
 
+def test_safe_norm_and_sqrt_have_finite_second_derivatives_at_zero():
+    """Reverse-over-reverse autodiff through ``_length`` and ``_sqrt_safe``
+    stays finite at zero (needed when differentiating a gradient-based metric
+    such as ``surface_area``)."""
+    from software_defined_matter.sdf._helpers import _length, _sqrt_safe
+
+    v0 = jnp.zeros(3, dtype=jnp.float32)
+    h_len = jax.grad(lambda v: jnp.sum(jax.grad(_length)(v)))(v0)
+    assert bool(jnp.all(jnp.isfinite(h_len)))
+
+    x0 = jnp.float32(0.0)
+    h_sqrt = jax.grad(jax.grad(_sqrt_safe))(x0)
+    assert bool(jnp.isfinite(h_sqrt))
+
+
 # --- The primitive tables stay current ---------------------------------------
 
 
@@ -808,7 +848,6 @@ def test_primitive_tables_name_real_primitives():
         KNOWN_OVER_REPORTING,
         KNOWN_BOUNDS,
         KNOWN_VALUE_JUMPS,
-        PARAMETER_DEPENDENT_RATE,
         KNOWN_UNDER_REPORTING,
         KNOWN_NOT_DISTANCES,
         KNOWN_NONFINITE,
@@ -836,8 +875,7 @@ def test_rate_declarations_match_the_audit_exceptions():
     from software_defined_matter.sdf.lipschitz import _PRIMITIVES_WITHOUT_UNIT_RATE
 
     sampled = {c[1] for c in _SAMPLED_CASES}
-    over = set(KNOWN_OVER_REPORTING) - set(PARAMETER_DEPENDENT_RATE)
-    exempt = set(KNOWN_BOUNDS) | over | sampled
+    exempt = set(KNOWN_BOUNDS) | set(KNOWN_OVER_REPORTING) | sampled
     assert set(_PRIMITIVES_WITHOUT_UNIT_RATE) == exempt | set(KNOWN_VALUE_JUMPS)
     assert set(_PRIMITIVES_WITHOUT_UNIT_RATE) <= set(_PRIMITIVES)
 
@@ -1019,30 +1057,35 @@ _WARPS = ("twist", "bend", "twist_radial", "twist_linear")
 _SWEEPS = tuple(c for c in OP_CASES if c.startswith("sweep-"))
 _WARP_STRETCH = "rotation angle varies with position, so space stretches more the further out"
 _WARP_COMPRESS = "a varying rotation compresses space as well as stretching it"
-_SWEEP_NAN = "sqrt of max(d2d, 0)**2 + max(d_ax, 0)**2, which is 0 at every interior point (#36)"
+_BALL_JOINT = "ball joint stretches a non-circular profile (#42)"
 
 # fmt: off
 # Over 1 near the surface, but bounded by ``infer_sdf_max_rate`` over an
 # evaluation domain: the stretch grows with distance from an axis, so no
 # constant inside the op can remove it. Exempt from the over-reporting check.
-OP_RATE_BOUNDED_BY_DOMAIN: dict[str, str] = dict.fromkeys(_WARPS, _WARP_STRETCH)
+OP_RATE_BOUNDED_BY_DOMAIN: dict[str, str] = {
+    **dict.fromkeys(_WARPS, _WARP_STRETCH),
+    "taper_linear-ramp": "s varies along Z, so space stretches more the further from the axis",
+}
 
 # Over 1 near the surface with no domain-dependent excuse.
 OP_KNOWN_OVER_REPORTING: dict[str, str] = {
-    "shear_linear":          "not divided by the shear's largest singular value (#36)",
-    "taper_linear-constant": "child(p / s) with no rescale: over by 1/s (#36)",
-    "taper_linear-ramp":     "child(p / s) with no rescale: over by 1/s (#36)",
-    "displace":              "not divided by 1 + the field's rate (#36)",
-    "loft-field-taper":      "radial offset across a tilted wall (#36)",
-    "loft_shape-taper":      "radial offset across a tilted wall (#36)",
-    "sweep-box-corner-90":   "ball joint stretches a non-circular profile (#42)",
-    "sweep-box-corner-60":   "ball joint stretches a non-circular profile (#42)",
+    "loft-field-taper":    "nothing bounds how fast two arbitrary section fields differ; "
+                           "interp='shape' is bounded",
+    "sweep-box-corner-90": _BALL_JOINT,
+    "sweep-box-corner-60": _BALL_JOINT,
 }
 
 # Under 1 near the surface.
 OP_KNOWN_UNDER_REPORTING: dict[str, str] = {
     **dict.fromkeys(("twist", "bend", "twist_radial"), _WARP_COMPRESS),
-    "displace":              "an added field slows the value as well as speeding it",
+    "displace":              "divided by 1 + the field's steepest slope, so slow where it is "
+                             "flatter",
+    "shear_linear":          "divided by the ramp's stretch everywhere, so slow outside it",
+    "taper_linear-constant": "a per-axis scale: unit rate in XY, slow along Z",
+    "taper_linear-ramp":     "multiplied by min(s0, s1, 1), the worst case over the ramp",
+    "loft_shape-taper":      "divided by the outline's fastest speed, so slow where it moves "
+                             "less",
     "scale_axis":            "min(s) * child(p / s) is slow along the stretched axes",
     "onion-ellipsoid":       "inherits the ellipsoid's scaled field (#40)",
     "smooth_union":          "the blend region is not a distance by design (#37)",
@@ -1060,7 +1103,6 @@ OP_KNOWN_NOT_DISTANCES: dict[str, tuple[frozenset[str], str]] = {
     "subtract-corner-sphere-from-box": (_OUTSIDE, "box-sphere seam has no closed form (#37)"),
     "round-intersect":                 (_OUTSIDE, "rounding an intersection grows its edges "
                                                   "(#37)"),
-    "elongate-three-axes":             (_INSIDE, "flat interior plateau (#36)"),
     "onion-ellipsoid":                 (_BOTH, "inherits the ellipsoid's scaled field (#40)"),
     "scale_axis":                      (_BOTH, "per-axis scale has no exact form (#37)"),
     "smooth_union":                    (_BOTH, "blend region (#37)"),
@@ -1075,28 +1117,22 @@ OP_KNOWN_NOT_DISTANCES: dict[str, tuple[frozenset[str], str]] = {
     "displace":                        (_BOTH, "displaced surface (#37)"),
     "loft-field-taper":                (_BOTH, "interpolated sections (#36, #37)"),
     "loft_shape-taper":                (_BOTH, "interpolated sections (#36, #37)"),
-    "sweep-circle-straight":           (_OUTSIDE, "inside the tube the value ignores the end "
-                                                  "caps, where outside projections land (#36)"),
-    "sweep-circle-corner-90":          (_OUTSIDE, "inside the tube the value ignores the end "
-                                                  "caps, where outside projections land (#36)"),
-    "sweep-box-corner-90":             (_OUTSIDE, "ball joint (#42), and the end caps (#36)"),
-    "sweep-box-corner-60":             (_OUTSIDE, "ball joint (#42), and the end caps (#36)"),
+    "sweep-circle-corner-90":          (_INSIDE, "the nearest segment wins, so inside a "
+                                                 "joint it acts as a union (#37)"),
+    "sweep-box-corner-90":             (_BOTH, "ball joint (#42); inside, a union (#37)"),
+    "sweep-box-corner-60":             (_BOTH, "ball joint (#42); inside, a union (#37)"),
 }
 
 # Value jumps somewhere: the nearby-pair check (#32).
-_CAP_JUMP = "inside the tube the value ignores the end caps, so it jumps across each cap (#36)"
+_JOINT_JUMP = "the ball joint folds a non-circular profile differently on each side of " \
+    "the segment switch (#42)"
 OP_KNOWN_VALUE_JUMPS: dict[str, str] = dict.fromkeys(
-    (c for c in _SWEEPS if c != "sweep-circle-bspline-loop"), _CAP_JUMP
+    ("sweep-box-corner-90", "sweep-box-corner-60"), _JOINT_JUMP
 )
 
 # Non-finite value or gradient, on random samples or on the round-number grid.
-OP_KNOWN_NONFINITE: dict[str, str] = {
-    **dict.fromkeys(_SWEEPS, _SWEEP_NAN),
-    "twist_radial":          "its radius bypasses _length; NaN on the Z axis (#36)",
-    "canonical_sector_fold": "atan2 without the _azimuth guard; NaN on the Z axis (#36)",
-    "extrusion":             "inherits polygon_2d's NaN on an edge (#36)",
-    "loft_shape-taper":      "_poly_sdf_batched's NaN on an edge (#36)",
-}
+# Empty since #36.
+OP_KNOWN_NONFINITE: dict[str, str] = {}
 # fmt: on
 
 
